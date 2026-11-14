@@ -169,7 +169,7 @@ function copyLinkedBooks(projectRoot, mirror, scratch) {
     // it is copied too, when the link is one they follow.
     const source = translationSourceToCopy(book, data);
     const links = ["follows", "precedes"].flatMap((field) => seriesLinks(book, data ?? {}, field))
-      .concat(source === undefined ? [] : [source]);
+      .concat(source === undefined ? [] : [source.real]);
     for (const link of links) {
       const real = realPath(link);
       if (!copies.has(real)) {
@@ -184,6 +184,11 @@ function copyLinkedBooks(projectRoot, mirror, scratch) {
         copies.set(real, home(real));
       }
       alias(link, copies.get(real));
+      // The copy of a project reached through a symlink sits at the path
+      // given, not the real one, so its translation-of resolves from there.
+      if (link === source?.real && copies.has(real)) {
+        alias(source.typed, copies.get(real));
+      }
       // Like `story series`, only sibling books' links are followed.
       if (path.dirname(link) === parent && !queued.has(real)) {
         queued.add(real);

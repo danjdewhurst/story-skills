@@ -64,44 +64,73 @@ export function translationLabel(value) {
 }
 
 // Why `value`, a translation-of path, cannot be followed from the project
-// at `root` without reading the disk, as [code, message], or null.
+// at `root` without reading the disk, as a finding, or null.
 function linkProblem(root, value) {
   const label = `story.md ${TRANSLATION_FIELD} ${value}`;
   // A control character or line break would print as a line of its own.
   if (PATH_CONTROL_CHARACTERS.test(value)) {
-    return ["translation-of-invalid", `${label.replace(PATH_CONTROL_CHARACTERS, "?")} has a control character or a mark that reorders text; write a plain path such as ../book-en`];
+    return err("translation-of-invalid", `${label.replace(new RegExp(PATH_CONTROL_CHARACTERS.source, "gu"), "?")} has a control character or a mark that reorders text; write a plain path such as ../book-en`, "story.md");
   }
   // An absolute path names one machine's folders, so the link breaks for a
   // co-author or a CI runner. C:book-en is relative to drive C's own
   // current folder, so it counts too. Checked before the backslash, so
   // C:\\books\\en is reported as absolute.
   if (path.posix.isAbsolute(value) || path.win32.isAbsolute(value) || /^[A-Za-z]:/.test(value)) {
-    return ["translation-of-absolute", `${label} is an absolute path; write the path from this project's folder, such as ../book-en`];
+    return err("translation-of-absolute", `${label} is an absolute path; write the path from this project's folder, such as ../book-en`, "story.md");
   }
   // A Windows separator resolves on Windows and nowhere else, so it is
   // reported by name on every platform instead of as a missing project.
   if (value.includes("\\")) {
-    return ["translation-of-backslash", `${label} uses a backslash; write ${value.replace(/\\/g, "/")} so the link works on every system`];
+    return err("translation-of-backslash", `${label} uses a backslash; write ${value.replace(/\\/g, "/")} so the link works on every system`, "story.md");
   }
   // More `..` steps than the project's folder is deep would stop at the
-  // file system root in the project, but climb out of a --dry-run copy.
-  let depth = canonicalPath(root).split(path.sep).filter(Boolean).length;
+  // file system root, or the drive or share root on Windows, in the
+  // project, but climb further from a --dry-run copy, which sits deeper.
+  // story translation --record checks the link on the project itself
+  // before a --dry-run (see assertTranslationLink).
+  const real = canonicalPath(root);
+  let depth = real.slice(path.parse(real).root.length).split(path.sep).filter(Boolean).length;
   for (const segment of value.split("/")) {
     depth += segment === ".." ? -1 : segment === "" || segment === "." ? 0 : 1;
     if (depth < 0) {
-      return ["translation-of-invalid", `${label} climbs above the file system root; write the path from this project's folder, such as ../book-en`];
+      return err("translation-of-invalid", `${label} climbs above the file system root; write the path from this project's folder, such as ../book-en`, "story.md");
     }
   }
   return null;
 }
 
 // The source project a --dry-run copies beside the copy of the project at
-// `root` (see preview.js): the path `translation-of` names, resolved as
-// the real run resolves it, or undefined when the link is unset or one
-// validateTranslationLink refuses before reading the disk.
+// `root` (see preview.js), or undefined when the link is unset or one
+// validateTranslationLink refuses before reading the disk: `real`, the
+// path the link names from the project's real folder, as the real run
+// resolves it, and `typed`, the path it names from `root` as given, which
+// is where the copy, made at that path, looks.
 export function translationSourceToCopy(root, data) {
   const value = translationOf(data);
-  return value === undefined || linkProblem(root, value) !== null ? undefined : path.resolve(canonicalPath(root), value);
+  if (value === undefined || linkProblem(root, value) !== null) {
+    return undefined;
+  }
+  return { real: path.resolve(canonicalPath(root), value), typed: path.resolve(root, value) };
+}
+
+// Refuses story translation --record on a project whose translation-of
+// cannot be followed. It runs on the project itself, so a --dry-run, which
+// runs on a copy, refuses the same links the real run does.
+export function assertTranslationLink(root) {
+  let data;
+  try {
+    data = readBookFrontmatter(root);
+  } catch {
+    // An unparseable story.md is reported by the run itself.
+    return;
+  }
+  const errors = [];
+  if (data && translationOf(data) !== undefined) {
+    validateTranslationLink(root, data, errors);
+  }
+  if (errors.length > 0) {
+    throw projectError(`Cannot record source hashes: ${errors.map((error) => error.message).join("; ")}`);
+  }
 }
 
 // Checks story.md `translation-of` the way validateSeriesLinks checks
@@ -118,7 +147,7 @@ export function validateTranslationLink(root, data, errors) {
   const label = `story.md ${TRANSLATION_FIELD} ${value}`;
   const problem = linkProblem(root, value);
   if (problem !== null) {
-    errors.push(err(problem[0], problem[1], "story.md"));
+    errors.push(problem);
     return null;
   }
   const real = canonicalPath(root);
@@ -147,14 +176,15 @@ export function validateTranslationLink(root, data, errors) {
   return target;
 }
 
-// The source-hash of a chapter: its title and prose paragraphs, as
-// proseParagraphs reads them, so rewrapping a paragraph or editing the
-// outline or an HTML comment does not count as a change to translate.
-function isInside(folder, target) {
-  const relative = path.relative(folder, target);
+// True when `inner` is a path inside the folder `outer`.
+function isInside(outer, inner) {
+  const relative = path.relative(outer, inner);
   return relative !== "" && !path.isAbsolute(relative) && !relative.split(path.sep).includes("..");
 }
 
+// The source-hash of a chapter: its title and prose paragraphs, as
+// proseParagraphs reads them, so rewrapping a paragraph or editing the
+// outline or an HTML comment does not count as a change to translate.
 export function sourceHash(title, paragraphs) {
   const text = nfc([String(title ?? ""), ...paragraphs].join("\n\n"));
   return crypto.createHash("sha256").update(text, "utf8").digest("hex").slice(0, SOURCE_HASH_LENGTH);
@@ -329,9 +359,9 @@ function recordedHash(data) {
 // listed as such.
 export function formatTranslationReport(report, { dryRun = false } = {}) {
   const lines = [
-    `# Translation: ${outputText(report.title)} (${report.language})`,
+    `# Translation: ${outputText(report.title)} (${outputText(report.language)})`,
     "",
-    `Source: ${outputText(report.source ?? "unknown")}${report.sourceTitle === null ? "" : ` - ${outputText(report.sourceTitle)} (${report.sourceLanguage})`}`
+    `Source: ${outputText(report.source ?? "unknown")}${report.sourceTitle === null ? "" : ` - ${outputText(report.sourceTitle)} (${outputText(report.sourceLanguage)})`}`
   ];
   if (report.recorded.length > 0) {
     lines.push(`${dryRun ? "Would record" : "Recorded"} ${SOURCE_HASH_FIELD} in ${report.recorded.length} ${report.recorded.length === 1 ? "chapter" : "chapters"}: ${report.recorded.join(", ")}`);
