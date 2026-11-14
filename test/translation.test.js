@@ -5,7 +5,7 @@ import { runCli } from "../src/cli.js";
 import { parseFrontmatter, replaceFrontmatter } from "../src/frontmatter.js";
 import { createStoryProject, scanProject, translationReport, validateLinks, validateProject } from "../src/story.js";
 import { LOCK_FILE } from "../src/lock.js";
-import { buildTranslation, sourceHash, translationLabel, validateTranslationLink } from "../src/translation.js";
+import { assertTranslationLink, buildTranslation, sourceHash, translationLabel, validateTranslationLink } from "../src/translation.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
 import { SYMLINKS_SUPPORTED, makeTempDir, memoryIo, messages, treeSnapshot } from "./helpers.js";
 
@@ -25,7 +25,9 @@ const PROSE = {
 // A source book with two chapters, a scene, and a character, and its
 // translation: a copy beside it whose story.md names it.
 function editions() {
-  const cwd = makeTempDir();
+  // The real path, so paths built here match the ones the link resolves
+  // from (a temp folder may sit behind a symlink, as /var does on macOS).
+  const cwd = fs.realpathSync(makeTempDir());
   const source = createStoryProject({ title: "The Tide", cwd, dir: "book-en" }).root;
   for (const title of ["One", "Two"]) {
     expect(invoke(source, ["add", "chapter", title]).code).toBe(0);
@@ -97,11 +99,14 @@ describe("translation-of", () => {
 
   test("a control character, a climb above the file system root, a drive path, or a folder holding the project is an error", () => {
     const { cwd, translation } = editions();
-    const above = `${"../".repeat(path.resolve(translation).split(path.sep).filter(Boolean).length + 1)}book-en`;
+    const depth = translation.slice(path.parse(translation).root.length).split(path.sep).filter(Boolean).length;
+    const above = `${"../".repeat(depth + 1)}book-en`;
     const cases = [
       ["../book-en\nTranslation is in step", "translation-of-invalid", "story.md translation-of ../book-en?Translation is in step has a control character or a mark that reorders text; write a plain path such as ../book-en"],
       [above, "translation-of-invalid", `story.md translation-of ${above} climbs above the file system root; write the path from this project's folder, such as ../book-en`],
-      ["C:book-en", "translation-of-absolute", "story.md translation-of C:book-en is an absolute path; write the path from this project's folder, such as ../book-en"]
+      ["C:book-en", "translation-of-absolute", "story.md translation-of C:book-en is an absolute path; write the path from this project's folder, such as ../book-en"],
+      ["C:\\books\\en", "translation-of-absolute", "story.md translation-of C:\\books\\en is an absolute path; write the path from this project's folder, such as ../book-en"],
+      ["../a\u0007b\u0007c", "translation-of-invalid", "story.md translation-of ../a?b?c has a control character or a mark that reorders text; write a plain path such as ../book-en"]
     ];
     for (const [value, code, message] of cases) {
       const errors = [];
@@ -134,8 +139,23 @@ describe("translation-of", () => {
     // links/es is a symlink to ../book-es, whose ../book-en is the source.
     fs.mkdirSync(path.join(cwd, "links"));
     fs.symlinkSync(translation, path.join(cwd, "links", "es"), "dir");
-    expect(validateLinks(path.join(cwd, "links", "es")).ok).toBe(true);
-    expect(translationReport(path.join(cwd, "links", "es")).ok).toBe(true);
+    const linked = path.join(cwd, "links", "es");
+    expect(validateLinks(linked).ok).toBe(true);
+    expect(translationReport(linked).ok).toBe(true);
+    // --dry-run reads the source as the real run does, and both name the
+    // files by the path given.
+    const preview = JSON.parse(invoke(cwd, ["translation", linked, "--record", "--dry-run", "--json"]).out);
+    const real = JSON.parse(invoke(cwd, ["translation", linked, "--record", "--json"]).out);
+    expect(preview).toMatchObject({ ok: true, data: { recorded: ["chapter-01", "chapter-02"], changes: real.data.changes } });
+    expect(real.data.changes).toEqual([{ action: "update", path: "chapters/chapter-01.md" }, { action: "update", path: "chapters/chapter-02.md" }]);
+    expect(real.writes).toEqual([chapterFile(linked, "chapter-01"), chapterFile(linked, "chapter-02")]);
+  });
+
+  test("project text in the report is escaped for the terminal", () => {
+    const { source, translation } = editions();
+    setFields(path.join(source, "story.md"), { title: "The \u001b[31mTide", language: "en\u0007" });
+    const { out } = invoke(translation, ["translation"]);
+    expect(out).toContain("Source: ../book-en - The \\u001b[31mTide (en\\u0007)");
   });
 
   test("story links checks the link, and validate asks for text", () => {
@@ -414,7 +434,14 @@ describe("story translation", () => {
     expect(report.errors).toEqual([{ code: "translation-of-unreadable", message: "story.md translation-of ../book-en: Refusing to read through symlink", file: "story.md", chapter: null }]);
     expect(() => buildTranslation(translation, failing, { record: true })).toThrow("Cannot record source hashes: Refusing to read through symlink");
 
+    // A link --record refuses, through the API as through the command.
+    setFields(path.join(translation, "story.md"), { "translation-of": "../book-fr" });
+    expect(() => translationReport(translation, { record: true })).toThrow("Cannot record source hashes: story.md translation-of ../book-fr is not a story project: missing story.md");
+
     fs.writeFileSync(path.join(translation, "story.md"), "---\ntitle: A\ntitle: B\n---\n", "utf8");
+    // The run reports an unparseable story.md itself, so the link check
+    // before it says nothing.
+    expect(() => assertTranslationLink(translation)).not.toThrow();
     const unreadable = translationReport(translation);
     expect(unreadable).toMatchObject({ ok: false, source: null, chapters: [] });
     expect(codes(unreadable.errors)).toEqual(["unreadable-file"]);

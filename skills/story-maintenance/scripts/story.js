@@ -25682,26 +25682,45 @@ function translationLabel(value) {
 function linkProblem(root, value) {
   const label = `story.md ${TRANSLATION_FIELD} ${value}`;
   if (PATH_CONTROL_CHARACTERS.test(value)) {
-    return ["translation-of-invalid", `${label.replace(PATH_CONTROL_CHARACTERS, "?")} has a control character or a mark that reorders text; write a plain path such as ../book-en`];
+    return err("translation-of-invalid", `${label.replace(new RegExp(PATH_CONTROL_CHARACTERS.source, "gu"), "?")} has a control character or a mark that reorders text; write a plain path such as ../book-en`, "story.md");
   }
   if (path24.posix.isAbsolute(value) || path24.win32.isAbsolute(value) || /^[A-Za-z]:/.test(value)) {
-    return ["translation-of-absolute", `${label} is an absolute path; write the path from this project's folder, such as ../book-en`];
+    return err("translation-of-absolute", `${label} is an absolute path; write the path from this project's folder, such as ../book-en`, "story.md");
   }
   if (value.includes("\\")) {
-    return ["translation-of-backslash", `${label} uses a backslash; write ${value.replace(/\\/g, "/")} so the link works on every system`];
+    return err("translation-of-backslash", `${label} uses a backslash; write ${value.replace(/\\/g, "/")} so the link works on every system`, "story.md");
   }
-  let depth = canonicalPath(root).split(path24.sep).filter(Boolean).length;
+  const real = canonicalPath(root);
+  let depth = real.slice(path24.parse(real).root.length).split(path24.sep).filter(Boolean).length;
   for (const segment of value.split("/")) {
     depth += segment === ".." ? -1 : segment === "" || segment === "." ? 0 : 1;
     if (depth < 0) {
-      return ["translation-of-invalid", `${label} climbs above the file system root; write the path from this project's folder, such as ../book-en`];
+      return err("translation-of-invalid", `${label} climbs above the file system root; write the path from this project's folder, such as ../book-en`, "story.md");
     }
   }
   return null;
 }
 function translationSourceToCopy(root, data) {
   const value = translationOf(data);
-  return value === undefined || linkProblem(root, value) !== null ? undefined : path24.resolve(canonicalPath(root), value);
+  if (value === undefined || linkProblem(root, value) !== null) {
+    return;
+  }
+  return { real: path24.resolve(canonicalPath(root), value), typed: path24.resolve(root, value) };
+}
+function assertTranslationLink(root) {
+  let data;
+  try {
+    data = readBookFrontmatter(root);
+  } catch {
+    return;
+  }
+  const errors = [];
+  if (data && translationOf(data) !== undefined) {
+    validateTranslationLink(root, data, errors);
+  }
+  if (errors.length > 0) {
+    throw projectError(`Cannot record source hashes: ${errors.map((error) => error.message).join("; ")}`);
+  }
 }
 function validateTranslationLink(root, data, errors) {
   const value = translationOf(data);
@@ -25711,7 +25730,7 @@ function validateTranslationLink(root, data, errors) {
   const label = `story.md ${TRANSLATION_FIELD} ${value}`;
   const problem = linkProblem(root, value);
   if (problem !== null) {
-    errors.push(err(problem[0], problem[1], "story.md"));
+    errors.push(problem);
     return null;
   }
   const real = canonicalPath(root);
@@ -25737,8 +25756,8 @@ function validateTranslationLink(root, data, errors) {
   }
   return target;
 }
-function isInside(folder, target) {
-  const relative = path24.relative(folder, target);
+function isInside(outer, inner) {
+  const relative = path24.relative(outer, inner);
   return relative !== "" && !path24.isAbsolute(relative) && !relative.split(path24.sep).includes("..");
 }
 function sourceHash(title, paragraphs) {
@@ -25895,9 +25914,9 @@ function recordedHash(data) {
 }
 function formatTranslationReport(report, { dryRun = false } = {}) {
   const lines = [
-    `# Translation: ${outputText(report.title)} (${report.language})`,
+    `# Translation: ${outputText(report.title)} (${outputText(report.language)})`,
     "",
-    `Source: ${outputText(report.source ?? "unknown")}${report.sourceTitle === null ? "" : ` - ${outputText(report.sourceTitle)} (${report.sourceLanguage})`}`
+    `Source: ${outputText(report.source ?? "unknown")}${report.sourceTitle === null ? "" : ` - ${outputText(report.sourceTitle)} (${outputText(report.sourceLanguage)})`}`
   ];
   if (report.recorded.length > 0) {
     lines.push(`${dryRun ? "Would record" : "Recorded"} ${SOURCE_HASH_FIELD} in ${report.recorded.length} ${report.recorded.length === 1 ? "chapter" : "chapters"}: ${report.recorded.join(", ")}`);
@@ -26023,7 +26042,7 @@ function copyLinkedBooks(projectRoot, mirror, scratch) {
       continue;
     }
     const source = translationSourceToCopy(book, data);
-    const links = ["follows", "precedes"].flatMap((field) => seriesLinks(book, data ?? {}, field)).concat(source === undefined ? [] : [source]);
+    const links = ["follows", "precedes"].flatMap((field) => seriesLinks(book, data ?? {}, field)).concat(source === undefined ? [] : [source.real]);
     for (const link of links) {
       const real = realPath2(link);
       if (!copies.has(real)) {
@@ -26036,6 +26055,9 @@ function copyLinkedBooks(projectRoot, mirror, scratch) {
         copies.set(real, home(real));
       }
       alias(link, copies.get(real));
+      if (link === source?.real && copies.has(real)) {
+        alias(source.typed, copies.get(real));
+      }
       if (path25.dirname(link) === parent && !queued.has(real)) {
         queued.add(real);
         queue.push(link);
@@ -38335,6 +38357,9 @@ var COMMANDS = [
         throw usageError("--chapter picks the one chapter translation --record writes: add --record", "chapter");
       }
       const projectRoot = root();
+      if (record) {
+        assertTranslationLink(projectRoot);
+      }
       const { result, changes } = record ? runOrPreview(dryRun, projectRoot, (target) => translationReport(target, { record, chapter })) : { result: translationReport(projectRoot), changes: [] };
       const report = applySeverity(result, overrides);
       if (wantsJson(parsed)) {

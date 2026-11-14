@@ -29,7 +29,7 @@ import { formatProgress } from "./progress.js";
 import { formatStateChanges } from "./progressions.js";
 import { formatProseReport } from "./prose.js";
 import { formatSeriesReport } from "./series.js";
-import { formatTranslationReport } from "./translation.js";
+import { assertTranslationLink, formatTranslationReport } from "./translation.js";
 import { formatSimilarity } from "./similarity.js";
 import { SNAPSHOTS_DIR, SNAPSHOT_MANIFEST, existingSnapshot, formatRestore, formatRestorePreview, formatSnapshot, formatSnapshotList, listSnapshots, planRestore, restoreSnapshot, snapshotId, snapshotProject } from "./snapshots.js";
 import { formatTimeline } from "./timeline.js";
@@ -835,6 +835,9 @@ export const COMMANDS = [
         throw usageError("--chapter picks the one chapter translation --record writes: add --record", "chapter");
       }
       const projectRoot = root();
+      if (record) {
+        assertTranslationLink(projectRoot);
+      }
       const { result, changes } = record
         ? runOrPreview(dryRun, projectRoot, (target) => translationReport(target, { record, chapter }))
         : { result: translationReport(projectRoot), changes: [] };
