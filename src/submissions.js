@@ -26,6 +26,15 @@ export const SUBMISSION_TRACKER = "submission/tracker.md";
 // Every tracker status, in the order the skill's template lists them.
 export const SUBMISSION_STATUSES = ["queried", "submitted", "held", "requested-partial", "requested-full", "offer", "declined", "no-response", "withdrawn"];
 
+// The statuses only short fiction uses: a book's tracker takes the rest.
+const SHORT_FICTION_STATUSES = new Set(["submitted", "held"]);
+const BOOK_STATUSES = SUBMISSION_STATUSES.filter((status) => !SHORT_FICTION_STATUSES.has(status));
+
+// The headers that mark a short-fiction tracker table: the columns the
+// skill's short-fiction template adds to the book template's (Market in
+// place of Agent/Publisher, and Type and Rights Offered).
+const SHORT_FICTION_HEADERS = ["market", "type", "rights offered"];
+
 // The statuses that wait for a reply from the agent, publisher, or market.
 // A request waits for the answer to the partial or full the author sent.
 export const WAITING_STATUSES = new Set(["queried", "submitted", "held", "requested-partial", "requested-full"]);
@@ -241,7 +250,7 @@ export function submissionsReport(root, { today, days = DEFAULT_FOLLOW_UP_DAYS }
       if (placeholderRow(cells.cells)) {
         continue;
       }
-      result.rows.push(checkRow(trackerRow(table.headers, cells), todayDays, days, result));
+      result.rows.push(checkRow(trackerRow(table.headers, cells), shortFiction(table.headers), todayDays, days, result));
     }
   }
   result.waiting = result.rows.filter((row) => row.waitingSince !== null).length;
@@ -250,19 +259,31 @@ export function submissionsReport(root, { today, days = DEFAULT_FOLLOW_UP_DAYS }
   return result;
 }
 
+// Whether a tracker table is a short-fiction one, by its headers.
+function shortFiction(headers) {
+  return SHORT_FICTION_HEADERS.some((header) => headers.includes(header));
+}
+
 // Checks one row's status and dates, counts its status, and adds how long
 // it has waited: from the later of Date Sent and Response Date, so a
-// request for the full manuscript waits from the day it came.
-function checkRow(row, todayDays, days, result) {
+// request for the full manuscript waits from the day it came. `submitted`
+// and `held` belong to a short-fiction table only; in a book's table they
+// are errors, and such a row is neither counted nor waiting.
+function checkRow(row, isShortFiction, todayDays, days, result) {
   const label = rowLabel(row);
   const status = (row.status ?? "").toLowerCase();
   row.status = status;
+  const allowed = isShortFiction ? SUBMISSION_STATUSES : BOOK_STATUSES;
+  let valid = false;
   if (status === "") {
-    result.errors.push(err("submission-invalid-status", `${label}: Status is empty; use one of ${SUBMISSION_STATUSES.join(", ")}`, SUBMISSION_TRACKER));
-  } else if (!SUBMISSION_STATUSES.includes(status)) {
-    result.errors.push(err("submission-invalid-status", `${label}: Status "${status}" is not a tracker status; use one of ${SUBMISSION_STATUSES.join(", ")}`, SUBMISSION_TRACKER));
+    result.errors.push(err("submission-invalid-status", `${label}: Status is empty; use one of ${allowed.join(", ")}`, SUBMISSION_TRACKER));
+  } else if (!isShortFiction && SHORT_FICTION_STATUSES.has(status)) {
+    result.errors.push(err("submission-invalid-status", `${label}: Status "${status}" is for short fiction, in a table with a Market, Type, or Rights Offered column; a book's tracker uses one of ${allowed.join(", ")}`, SUBMISSION_TRACKER));
+  } else if (!allowed.includes(status)) {
+    result.errors.push(err("submission-invalid-status", `${label}: Status "${status}" is not a tracker status; use one of ${allowed.join(", ")}`, SUBMISSION_TRACKER));
   } else {
     result.counts[status] += 1;
+    valid = true;
   }
   const sent = rowDate(row, "dateSent", "Date Sent", label, result, { required: true });
   const response = rowDate(row, "responseDate", "Response Date", label, result, { required: false });
@@ -275,7 +296,7 @@ function checkRow(row, todayDays, days, result) {
   row.waitingSince = null;
   row.waitingDays = null;
   row.overdue = false;
-  if (WAITING_STATUSES.has(status) && since !== undefined) {
+  if (valid && WAITING_STATUSES.has(status) && since !== undefined) {
     row.waitingSince = since.text;
     row.waitingDays = todayDays - since.days;
     row.overdue = row.waitingDays >= days;

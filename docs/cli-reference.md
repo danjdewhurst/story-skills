@@ -1604,7 +1604,7 @@ The tracker is a markdown table whose header has a `Status` and a `Date Sent` co
 
 Each row is checked:
 
-- `Status` is one of `queried`, `submitted`, `held`, `requested-partial`, `requested-full`, `offer`, `declined`, `no-response`, or `withdrawn`, in any letter case and with or without code marks. Anything else, or an empty cell, is a [`submission-invalid-status`](#codes-submissions) error.
+- `Status` is one of `queried`, `requested-partial`, `requested-full`, `offer`, `declined`, `no-response`, or `withdrawn`, in any letter case and with or without code marks. A short-fiction table, one with a `Market`, `Type`, or `Rights Offered` column, also takes `submitted` and `held`. Anything else, `submitted` or `held` in a book's table, or an empty cell, is a [`submission-invalid-status`](#codes-submissions) error, and the row is neither counted nor waiting.
 - `Date Sent` is a real `YYYY-MM-DD` day, and `Response Date` is one too or blank. Anything else is a [`submission-invalid-date`](#codes-submissions) error. A date after today, usually a mistyped year, is a [`submission-date-in-future`](#codes-submissions) warning: such a row would never come due.
 - A row with a status that waits for a reply (`queried`, `submitted`, `held`, `requested-partial`, or `requested-full`) waits from the later of its `Date Sent` and `Response Date`, so a request for the full manuscript waits from the day the request came. A row that has waited `--days` days or more is a [`submission-overdue`](#codes-submissions) warning. A row whose warning a `severity` entry turns `off` or an [exemption](continuity.md#exemptions) dismisses is not counted as due a follow-up, in the text, `--json`, and `next`.
 
@@ -3915,7 +3915,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 |---|---|---|
 | `submission-tracker-no-table` | error | `submission/tracker.md` has no table with a `Status` and a `Date Sent` column. |
 | `submission-tracker-too-large` | error | `submission/tracker.md` has more than 10,000 rows in its tracker tables. Reading stops there and no row is checked, so a cloned project cannot fill the output or the memory `--json` needs. |
-| `submission-invalid-status` | error | A tracker row's `Status` is empty or not one of `queried`, `submitted`, `held`, `requested-partial`, `requested-full`, `offer`, `declined`, `no-response`, or `withdrawn`. |
+| `submission-invalid-status` | error | A tracker row's `Status` is empty or not one of `queried`, `requested-partial`, `requested-full`, `offer`, `declined`, `no-response`, or `withdrawn`, plus `submitted` and `held` in a short-fiction table (one with a `Market`, `Type`, or `Rights Offered` column). |
 | `submission-invalid-date` | error | A tracker row's `Date Sent` is empty or not a real `YYYY-MM-DD` day, or its `Response Date` is neither blank nor such a day. |
 | `submission-date-in-future` | warning | A tracker row's `Date Sent` or `Response Date` is after today (`--date`). A mistyped year keeps the row from ever coming due. |
 | `submission-overdue` | warning | A tracker row with a status that waits for a reply (`queried`, `submitted`, `held`, `requested-partial`, or `requested-full`) has waited `--days` days (default 90) or more since the later of its `Date Sent` and `Response Date`. `story next` turns these into one follow-up action. |
