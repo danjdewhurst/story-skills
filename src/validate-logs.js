@@ -4,7 +4,8 @@ import path from "node:path";
 import { storyDateError } from "./continuity.js";
 import { lstatIfExists } from "./files.js";
 import { PROGRESS_FILE, cleanSessions } from "./progress.js";
-import { err, warn } from "./findings.js";
+import { err, isCustomCode, warn } from "./findings.js";
+import { customCodeId, definedCheckLevels } from "./custom-checks.js";
 import { EXEMPTIONS_FILE, exemptionFile, exemptionProblems, isChapterId } from "./exemptions.js";
 import { asArray } from "./scan.js";
 import { validateObjectArray } from "./validate-fields.js";
@@ -53,6 +54,7 @@ export function validateExemptions(project, errors, warnings) {
   }
 
   const chapters = new Set(project.chapters.map((chapter) => chapter.id));
+  const checks = definedCheckLevels(project.story.data);
   for (const [index, entry] of entries.entries()) {
     const entryLabel = `${label} exemptions[${index}]`;
     errors.push(...exemptionProblems(entry, entryLabel));
@@ -64,6 +66,10 @@ export function validateExemptions(project, errors, warnings) {
     const file = typeof entry.file === "string" ? exemptionFile(entry.file) : null;
     if (file !== null && !lstatIfExists(path.join(project.root, file))?.isFile()) {
       warnings.push(warn("stale-exemption", `${entryLabel} file ${entry.file} is not a file in the project, so the entry matches nothing`, label));
+    }
+    // A story.md that does not parse is reported on its own.
+    if (isCustomCode(entry.code) && !project.story.unreadable && !checks.has(customCodeId(entry.code))) {
+      errors.push(err("exemption-unknown-code", `${entryLabel} code ${entry.code} names no check in story.md checks`, label));
     }
     if (isChapterId(entry.chapter) && !chapters.has(entry.chapter)) {
       warnings.push(warn("stale-exemption", `${entryLabel} chapter ${entry.chapter} is not a chapter in chapters/, so the entry matches nothing`, label));

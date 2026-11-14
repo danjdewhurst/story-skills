@@ -28,6 +28,11 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - `story next` adds a `[P2] Follow up on submissions` action for those rows, and takes `--days` too. A row whose warning `severity` turns off or an exemption dismisses is not counted.
   - `cli-defaults` in `story.md` can set `days` for either command, and `story validate` checks it; `submissions --date` cannot be a default.
   - The `submission` skill runs the command instead of counting by hand, and its tracker template drops the hand-kept `## Summary` list.
+- `story.md` can list `checks`, rules of the project's own that `story check` and `story continuity` report as findings. See [Project checks](docs/project-format.md#project-checks). ([#891](https://github.com/danjdewhurst/story-skills/issues/891))
+  - Each check gives an `id`, a `kind`, `where` filters in the `story list --where` syntax that describe the problem, a `level` (`error` or `warning`), and a `message`. Every matching file is a finding coded `custom-<id>`, such as `custom-chapter-needs-hook`.
+  - `severity` can promote or turn off a `warning` check's code, `continuity/exemptions.md` can dismiss one finding at either level, and `--strict`, `--json`, and the language server treat the findings like any other.
+  - `story validate` reports a broken entry: an unknown kind, a filter it cannot read, a repeated id (`duplicate-check`), a bad level or empty message (`invalid-check`), a missing field, and a filter on a key no file sets (`check-unknown-key`, a warning). `story continuity` skips a broken entry.
+  - The `harbor-of-second-light` example has two checks, and `schemas/story.schema.json` and `schemas/result.schema.json` accept `custom-<id>` codes.
 
 ### Changed
 

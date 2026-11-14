@@ -1,6 +1,6 @@
 import path from "node:path";
 import { readTextFile } from "./files.js";
-import { CHAPTER_CODES, FINDING_CODES, PROJECTLESS_CODES, err, exemptionCodes } from "./findings.js";
+import { CHAPTER_CODES, FINDING_CODES, PROJECTLESS_CODES, err, exemptionCodes, isCustomCode } from "./findings.js";
 import { parseFrontmatter } from "./frontmatter.js";
 import { nearMissKeys } from "./frontmatter-keys.js";
 import { kebabCase } from "./markdown.js";
@@ -130,6 +130,11 @@ export function isChapterId(value) {
 function codeError(code, label) {
   if (typeof code !== "string" || code.trim() === "") {
     return err("field-not-text", `${label} code must be a finding code, such as clock-backward`, EXEMPTIONS_FILE);
+  }
+  // A story.md check's code: story validate checks that story.md defines
+  // the check, since this log is read without story.md.
+  if (isCustomCode(code)) {
+    return null;
   }
   if (!Object.hasOwn(FINDING_CODES, code)) {
     return err("exemption-unknown-code", `${label} code ${code} is not a finding code${suggestion(code, Object.keys(FINDING_CODES))}`, EXEMPTIONS_FILE);

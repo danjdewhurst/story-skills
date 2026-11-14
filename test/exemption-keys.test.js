@@ -359,7 +359,8 @@ describe("exemption keys (#284)", () => {
     const { root } = povProject();
     writeLog(root, "  - code: pov-not-in-cast\n    file: chapters/chapter-01.md\n    chapter: chapter-01\n    reason: fine\n  - code: missing-field\n    file: /abs.md\n    chapter: Chapter 1\n    reason: bad");
     expect(checkProjectSchema(root).filter((problem) => problem.includes("exemptions"))).toEqual([
-      "$.continuity.exemptions[1].code: \"missing-field\" is not one of " + schema.code.enum.join(", "),
+      "$.continuity.exemptions[1].code: \"missing-field\" is not one of " + schema.code.anyOf[0].enum.join(", "),
+      `$.continuity.exemptions[1].code: "missing-field" does not match ${schema.code.anyOf[1].pattern}`,
       `$.continuity.exemptions[1].file: "/abs.md" does not match ${schema.file.pattern}`,
       `$.continuity.exemptions[1].chapter: "Chapter 1" does not match ^[a-z0-9]+(?:-[a-z0-9]+)*$`
     ]);

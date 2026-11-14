@@ -139,7 +139,7 @@ function resolveRef(schema, ref) {
 const SUPPORTED = new Set([
   "$schema", "$id", "$comment", "$defs", "title", "description",
   "$ref", "type", "required", "properties", "items", "enum", "const", "pattern", "minimum", "maximum", "exclusiveMinimum", "minLength", "minItems", "maxItems",
-  "allOf", "if", "then"
+  "allOf", "anyOf", "if", "then"
 ]);
 
 // Walks the whole schema up front, so an unsupported keyword fails even
@@ -164,8 +164,10 @@ export function assertSupportedSchema(schema, root = schema, at = "#") {
   if (schema.items !== undefined) {
     assertSupportedSchema(schema.items, root, `${at}/items`);
   }
-  for (const [index, child] of (schema.allOf ?? []).entries()) {
-    assertSupportedSchema(child, root, `${at}/allOf/${index}`);
+  for (const group of ["allOf", "anyOf"]) {
+    for (const [index, child] of (schema[group] ?? []).entries()) {
+      assertSupportedSchema(child, root, `${at}/${group}/${index}`);
+    }
   }
   // `if` and `then` only work as a pair here (there is no `else`), so a
   // lone one is a mistake rather than a no-op.
@@ -244,6 +246,14 @@ export function validateAgainstSchema(value, schema, root = schema, at = "$") {
   }
   for (const child of schema.allOf ?? []) {
     errors.push(...validateAgainstSchema(value, child, root, at));
+  }
+  // anyOf passes when one branch does; otherwise every branch's problems
+  // are reported.
+  if (schema.anyOf !== undefined) {
+    const failures = schema.anyOf.map((child) => validateAgainstSchema(value, child, root, at));
+    if (failures.every((problems) => problems.length > 0)) {
+      errors.push(...failures.flat());
+    }
   }
   // `then` applies only when the value matches `if`.
   if (schema.if !== undefined && validateAgainstSchema(value, schema.if, root, at).length === 0) {

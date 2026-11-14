@@ -41,6 +41,17 @@ queries:
   - name: open-questions
     kind: questions
     where: [status=open]
+checks:
+  - id: chapter-needs-hook
+    kind: chapter
+    where: [status=draft, "!hook"]
+    level: warning
+    message: has no hook
+  - id: scene-needs-location
+    kind: scenes
+    where: ["!location"]
+    level: error
+    message: has no location
 ---
 
 

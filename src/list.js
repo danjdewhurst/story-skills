@@ -47,7 +47,7 @@ const QUERY_KINDS = new Set(LIST_KINDS.flatMap((entry) => [entry.kind, entry.sin
 const QUERY_KEYS = ["name", "kind", "where"];
 
 // A query name, spelled as schemas/story.schema.json spells an id.
-const KEBAB_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+export const KEBAB_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 // The line breaks JavaScript's `.` does not match: a comparison's value is
 // one line.
@@ -180,7 +180,7 @@ function keyHint(key, candidates) {
 // terminal or a CI log escaped: JSON.stringify escapes the C0 controls (so
 // an ESC or a line break that would start a GitHub workflow command), and
 // UNSAFE_IN_MESSAGE the rest.
-function quoted(value) {
+export function quoted(value) {
   return JSON.stringify(value).replace(UNSAFE_IN_MESSAGE, (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`);
 }
 
@@ -256,13 +256,7 @@ export function queryFindings(project) {
     errors.push(err("field-not-list", "story.md frontmatter field queries must be a list", "story.md"));
     return { errors, warnings };
   }
-  const keysByKind = new Map();
-  const knownFor = (entry) => {
-    if (!keysByKind.has(entry)) {
-      keysByKind.set(entry, knownKeys(project, entry));
-    }
-    return keysByKind.get(entry);
-  };
+  const knownFor = knownKeysOnce(project);
   const seen = new Set();
   raw.forEach((item, index) => {
     if (!isMapping(item)) {
@@ -304,35 +298,57 @@ function queryProblems(project, item, index, knownFor) {
     errors.push(err("id-not-kebab", `${label} name ${quoted(item.name)} must be kebab-case, such as mara-drafts`, "story.md"));
   }
 
+  const spec = readFilterSpec(project, item, label, knownFor);
+  for (const problem of spec.problems) {
+    if (problem.type === "unknown-key") {
+      warnings.push(warn("query-unknown-key", problem.message, "story.md"));
+    } else {
+      errors.push(problem.type === "missing" ? err("missing-field", problem.message, "story.md") : err("invalid-query", problem.message, "story.md"));
+    }
+  }
+  return { errors, warnings };
+}
+
+// The kind and filters of a saved query or a story.md check, and what is
+// wrong with them, as { type, message } problems: "missing" for a missing
+// kind or where, "invalid" for a kind story list does not take, a where
+// that is not a list of one or more filters, or a filter --where could not
+// read, and "unknown-key" for a filter on a key the kind neither defines nor
+// any of its files sets, which may be a typo or a key no file sets yet
+// (checked only while every file parses, as buildList checks it). `entry`
+// is the kind's LIST_KINDS entry, or null; `filters` the filters it read.
+// `knownFor` gives a kind's known keys. The caller codes each problem.
+export function readFilterSpec(project, item, label, knownFor) {
+  const problems = [];
+  const filters = [];
   let entry = null;
   if (item.kind === undefined) {
-    errors.push(err("missing-field", `${label} is missing kind`, "story.md"));
+    problems.push({ type: "missing", message: `${label} is missing kind` });
   } else if (QUERY_KINDS.has(item.kind)) {
     entry = listKind(item.kind);
   } else {
     const near = typeof item.kind === "string" ? suggestion(item.kind, KIND_NAMES) : "";
-    errors.push(err("invalid-query", `${label} kind ${quoted(item.kind)} is not a kind story list takes (${KIND_NAMES.join(", ")}, or the singular)${near}`, "story.md"));
+    problems.push({ type: "invalid", message: `${label} kind ${quoted(item.kind)} is not a kind story list takes (${KIND_NAMES.join(", ")}, or the singular)${near}` });
   }
 
   if (item.where === undefined) {
-    errors.push(err("missing-field", `${label} is missing where`, "story.md"));
-    return { errors, warnings };
+    problems.push({ type: "missing", message: `${label} is missing where` });
+    return { entry, filters, problems };
   }
   if (Array.isArray(item.where) && item.where.length === 0) {
-    errors.push(err("invalid-query", `${label} where needs at least one filter, such as where: [status=draft]`, "story.md"));
-    return { errors, warnings };
+    problems.push({ type: "invalid", message: `${label} where needs at least one filter, such as where: [status=draft]` });
+    return { entry, filters, problems };
   }
   if (!Array.isArray(item.where) || !item.where.every((filter) => typeof filter === "string")) {
-    errors.push(err("invalid-query", `${label} where must be a list of filters, such as where: [status=draft, pov=mara-quill]`, "story.md"));
-    return { errors, warnings };
+    problems.push({ type: "invalid", message: `${label} where must be a list of filters, such as where: [status=draft, pov=mara-quill]` });
+    return { entry, filters, problems };
   }
-  const filters = [];
   for (const text of item.where) {
     const filter = readWhere(text);
     if (filter.problem === "value") {
-      errors.push(err("invalid-query", `${label} where filter ${quoted(filter.text)} needs a value after ${filter.operator}; write ${quoted(filter.key)} for a key that is set, or ${quoted(`!${filter.key}`)} for one that is not`, "story.md"));
+      problems.push({ type: "invalid", message: `${label} where filter ${quoted(filter.text)} needs a value after ${filter.operator}; write ${quoted(filter.key)} for a key that is set, or ${quoted(`!${filter.key}`)} for one that is not` });
     } else if (filter.problem === "shape") {
-      errors.push(err("invalid-query", `${label} cannot read where filter ${quoted(filter.text)}: expected key=value, key!=value, key, or "!key"`, "story.md"));
+      problems.push({ type: "invalid", message: `${label} cannot read where filter ${quoted(filter.text)}: expected key=value, key!=value, key, or "!key"` });
     } else {
       filters.push(filter);
     }
@@ -340,13 +356,25 @@ function queryProblems(project, item, index, knownFor) {
   if (entry !== null && (project.fileErrors ?? []).length === 0) {
     const known = knownFor(entry);
     // The guess looks only among the schema's keys: a story.md can hold many
-    // queries and a file many custom keys, and comparing every pair would
-    // take minutes.
+    // queries and checks and a file many custom keys, and comparing every
+    // pair would take minutes.
     for (const filter of filters.filter((candidate) => !known.has(candidate.key))) {
-      warnings.push(warn("query-unknown-key", `${label} filters on ${quoted(filter.key)}, which no ${entry.singular} file sets and the schema does not define, so it matches as unset${keyHint(filter.key, FRONTMATTER_KEYS[entry.schema])}`, "story.md"));
+      problems.push({ type: "unknown-key", message: `${label} filters on ${quoted(filter.key)}, which no ${entry.singular} file sets and the schema does not define, so it matches as unset${keyHint(filter.key, FRONTMATTER_KEYS[entry.schema])}` });
     }
   }
-  return { errors, warnings };
+  return { entry, filters, problems };
+}
+
+// A memo of knownKeys, so each kind's keys are read once however many
+// queries or checks list it.
+export function knownKeysOnce(project) {
+  const keysByKind = new Map();
+  return (entry) => {
+    if (!keysByKind.has(entry)) {
+      keysByKind.set(entry, knownKeys(project, entry));
+    }
+    return keysByKind.get(entry);
+  };
 }
 
 // The story.md queries with a filter that compares a reference key with
@@ -395,7 +423,7 @@ export function shownQuery({ item, index }) {
   return typeof item.name === "string" && KEBAB_NAME.test(item.name) ? item.name : `queries[${index}]`;
 }
 
-function isMapping(value) {
+export function isMapping(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
@@ -403,6 +431,12 @@ function isMapping(value) {
 // constructor, is not a field, so a file that does not set it leaves it unset.
 function ownField(frontmatter, key) {
   return Object.hasOwn(frontmatter, key) ? frontmatter[key] : undefined;
+}
+
+// Whether an entity's frontmatter matches every filter, as story list
+// matches it.
+export function matchesAll(frontmatter, filters) {
+  return filters.every((filter) => matches(frontmatter ?? {}, filter));
 }
 
 function matches(frontmatter, filter) {

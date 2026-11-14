@@ -7,7 +7,7 @@ import { formatGrid, gridFormat } from "./grid.js";
 import { formatList } from "./list.js";
 import { formatComparison, formatLabelMapping } from "./compare.js";
 import { applySeverity, findingOverrides, readCliConfig } from "./config.js";
-import { FINDING_CODES, outputText, warn } from "./findings.js";
+import { FINDING_CODES, isCustomCode, outputText, warn } from "./findings.js";
 import { importManuscript } from "./import.js";
 import { serveLanguageServer } from "./language-server.js";
 import { assertExistingAncestorInsideRoot, assertSafeProjectDirectory, currentText, lstatIfExists, planChanges, recordChanges } from "./files.js";
@@ -315,7 +315,8 @@ export const COMMANDS = [
       "location routes, durable state, chapter numbering",
       "(chapter-numbering-start, chapter-numbering-gap), and",
       "open promises in a complete story",
-      "(complete-with-open-promise).",
+      "(complete-with-open-promise), and the story.md",
+      "checks (custom-<id>).",
       "Findings matching continuity/exemptions.md are",
       "reported as dismissed"
     ],
@@ -2031,7 +2032,9 @@ function printFindings(io, result) {
 // A finding as the text output prints it. A warning, or a warning that
 // severity promoted to an error, ends with its code, the name a story.md
 // severity entry takes; errors cannot be overridden, so they print without.
+// A story.md check's finding ends with its custom-<id> code at either
+// level, the name an exemption takes.
 function findingLine(finding) {
   const message = outputText(finding.message);
-  return FINDING_CODES[finding.code] === "warning" ? `${message} [${finding.code}]` : message;
+  return FINDING_CODES[finding.code] === "warning" || isCustomCode(finding.code) ? `${message} [${finding.code}]` : message;
 }

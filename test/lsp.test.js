@@ -363,6 +363,14 @@ describe("language server diagnostics", () => {
     expect(client.diagnostics(root, "chapters/chapter-03.md").map((diagnostic) => [diagnostic.code, diagnostic.severity])).toEqual([["pov-not-in-cast", SEVERITY_WARNING]]);
   });
 
+  test("reports a story.md check's findings on the file it matched (#891)", () => {
+    const root = storyProject();
+    edit(root, "story.md", (text) => text.replace("\n---\n", "\nchecks:\n  - id: nessa-pov\n    kind: chapter\n    where: [pov=nessa-thorn]\n    level: warning\n    message: is told by Nessa\n---\n"));
+    const client = startServer({ folders: [root] });
+    const custom = client.diagnostics(root, "chapters/chapter-03.md").filter((diagnostic) => diagnostic.code === "custom-nessa-pov");
+    expect(custom.map((diagnostic) => [diagnostic.severity, diagnostic.message])).toEqual([[SEVERITY_WARNING, "is told by Nessa"]]);
+  });
+
   test("checks unsaved text, at once on open and after a pause while typing", () => {
     const root = storyProject();
     const client = startServer({ folders: [root] });

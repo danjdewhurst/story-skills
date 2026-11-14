@@ -5,7 +5,8 @@ import path from "node:path";
 import { COMMANDS } from "./commands.js";
 import { dismissByExemptions, readExemptionLog } from "./exemptions.js";
 import { readTextFile } from "./files.js";
-import { FINDING_CODES, PROJECTLESS_CODES, err, severityCodes } from "./findings.js";
+import { FINDING_CODES, PROJECTLESS_CODES, err, isCustomCode, severityCodes } from "./findings.js";
+import { customCodeId, definedCheckLevels } from "./custom-checks.js";
 import { parseFrontmatter } from "./frontmatter.js";
 import { OPTIONS, normalizeBooleanValue, optionFamily, suggestion } from "./options.js";
 import { PDF_ENGINES, isPdfEngineName } from "./pdf.js";
@@ -84,7 +85,7 @@ export function validateCliConfig(data, errors) {
 export function parseCliConfig(data) {
   const errors = [];
   const defaults = parseDefaults(data["cli-defaults"], errors);
-  const severity = parseSeverity(data.severity, errors);
+  const severity = parseSeverity(data.severity, errors, definedCheckLevels(data));
   return { defaults, severity, errors };
 }
 
@@ -186,7 +187,9 @@ function parseCommandDefaults(command, item, label, errors) {
   return values;
 }
 
-function parseSeverity(raw, errors) {
+// `checks` maps each story.md check id to its level, so an entry can name
+// the custom-<id> code of a check that reports a warning.
+function parseSeverity(raw, errors, checks) {
   const severity = {};
   const codes = severityCodes();
   for (const [index, item] of listItems(raw, "severity", errors)) {
@@ -206,11 +209,22 @@ function parseSeverity(raw, errors) {
       errors.push(`${label} names ${code}, which is an error: severity changes only warnings`);
       continue;
     }
-    if (PROJECTLESS_CODES.includes(code)) {
+    if (isCustomCode(code)) {
+      const id = customCodeId(code);
+      if (!checks.has(id)) {
+        const defined = [...checks.keys()].map((check) => `custom-${check}`);
+        errors.push(`${label} names ${code}, but story.md checks has no check ${id}${suggestion(code, defined)}`);
+        continue;
+      }
+      if (checks.get(id) === "error") {
+        errors.push(`${label} names ${code}, whose check reports an error: severity changes only warnings, so set the check's level instead`);
+        continue;
+      }
+    } else if (PROJECTLESS_CODES.includes(code)) {
       errors.push(`${label} names ${code}, which story init or story import reports before there is a story.md to read: severity cannot change it`);
       continue;
     }
-    if (!codes.includes(code)) {
+    if (!codes.includes(code) && !isCustomCode(code)) {
       errors.push(`${label} names unknown warning ${code}${suggestion(code, codes)}`);
       continue;
     }

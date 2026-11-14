@@ -235,6 +235,25 @@ To fail on every warning from `validate`, `links`, and `continuity`, run `story 
 story check . --strict
 ```
 
+### Rules of your own
+
+A rule that a saved query only lists, such as "every draft chapter has a `hook`", can fail the job instead. Add it to `story.md` as a [project check](project-format.md#project-checks), and `story check` reports each file it matches under the code `custom-<id>`:
+
+```yaml
+checks:
+  - id: chapter-needs-hook
+    kind: chapter
+    where: [status=draft, "!hook"]
+    level: error
+    message: has no hook
+```
+
+```text
+error: chapters/chapter-03.md has no hook [custom-chapter-needs-hook]
+```
+
+A check with `level: error` fails `story check` and `story continuity`. A check with `level: warning` fails them only under `--strict`, or when a `severity` entry promotes its code. With `--json`, each finding is a diagnostic with the `custom-<id>` code and `"check": "continuity"`. `story validate` reports a broken check, so a typo in the list fails the job too.
+
 Other commands have no `--strict` flag, but you can fail on any `warning:` line:
 
 ```shell

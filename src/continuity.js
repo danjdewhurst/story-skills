@@ -1,7 +1,8 @@
 import path from "node:path";
 import { DEFAULT_HOURS_PER_DAY, MAX_HOURS_PER_DAY, calendarShaped, dayHours, dayLengthKnown, parseCalendarDate } from "./calendar.js";
 import { dismissByExemptions } from "./exemptions.js";
-import { CONTINUITY_ERROR_CODES, err, warn } from "./findings.js";
+import { CONTINUITY_ERROR_CODES, err, isCustomCode, warn } from "./findings.js";
+import { customCheckFindings } from "./custom-checks.js";
 import { projectPath } from "./files.js";
 import { kebabCase } from "./markdown.js";
 import { chapterChronology, deathWindow } from "./chronology.js";
@@ -63,17 +64,21 @@ export function checkContinuity(project) {
   checkStateAgainstStory(project, context, warnings);
   checkPropCustody(project, context, errors);
   checkClock(project, errors, warnings);
+  const custom = customCheckFindings(project);
+  errors.push(...custom.errors);
+  warnings.push(...custom.warnings);
 
   return withExemptions(project, { ok: errors.length === 0, errors, warnings });
 }
 
 // Applies continuity/exemptions.md: findings an entry matches are moved out
-// of errors/warnings and reported as dismissed. `ok` reflects only the
+// of errors/warnings and reported as dismissed. A story.md check's error is
+// the project's own rule, so an exemption can dismiss it too. `ok` reflects only the
 // errors that remain.
 function withExemptions(project, result) {
   return dismissByExemptions({ ...result, dismissed: [] }, project.exemptions ?? [], {
     errors: true,
-    dismissable: (finding) => CONTINUITY_ERROR_CODES.includes(finding.code)
+    dismissable: (finding) => CONTINUITY_ERROR_CODES.includes(finding.code) || isCustomCode(finding.code)
   });
 }
 

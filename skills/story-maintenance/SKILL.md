@@ -99,6 +99,8 @@ Use:
 
 `story.md` may carry `cli-defaults` (default flags per command, such as `- command: build` with `format: html`) and `severity` (named warnings promoted with `level: error` or silenced with `level: off`, such as `- warning: todo-markers`). A flag on the command line always wins. Edit these fields only when the user asks for project-wide defaults or stricter checks, then run `story validate`: it rejects unknown commands, flags, warning codes, and levels, and while either field is invalid the other commands refuse to run. Every warning line ends with its code in brackets, such as `[todo-markers]`, which is the name a `severity` entry takes; an `error:` line ending in a code is a warning the project has promoted. Errors cannot be overridden. `docs/cli-reference.md` lists every code under Finding codes.
 
+`story.md` may also carry `checks`, rules of the project's own: each entry has an `id`, a `kind`, `where` filters in the `story list --where` syntax that describe the problem, a `level` (`error` or `warning`), and a `message`, such as `- id: chapter-needs-hook` with `kind: chapter`, `where: [status=draft, "!hook"]`, `level: warning`, and `message: has no hook`. `story check` and `story continuity` report every matching file under the code `custom-<id>`, which `severity` and `continuity/exemptions.md` take like any other code. Add a check only when the user asks for a rule the project should enforce, then run `story validate`, which reports a broken entry.
+
 ## Failure Handling
 
 - Treat CLI errors as actionable maintenance findings.

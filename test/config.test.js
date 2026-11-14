@@ -135,7 +135,7 @@ describe("finding codes", () => {
   test("the schema lists the same warning codes and levels as the validator", () => {
     const schema = JSON.parse(fs.readFileSync(path.join(import.meta.dir, "..", "schemas", "story.schema.json"), "utf8"));
     const severity = schema.properties.story.properties.severity.items.properties;
-    expect(severity.warning.enum).toEqual(severityCodes());
+    expect(severity.warning.anyOf[0].enum).toEqual(severityCodes());
     expect(severity.level.enum).toEqual(SEVERITY_LEVELS);
     const command = new RegExp(schema.properties.story.properties["cli-defaults"].items.properties.command.pattern, "u");
     expect(COMMANDS.every((entry) => command.test(entry.name))).toBe(true);

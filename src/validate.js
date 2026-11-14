@@ -15,6 +15,7 @@ import { validateBuildStyle } from "./build-style.js";
 import { validateCliConfig } from "./config.js";
 import { validatePasses } from "./passes.js";
 import { queryFindings } from "./list.js";
+import { checkDefinitionFindings } from "./custom-checks.js";
 import { plural } from "./plural.js";
 import { isBookNumber } from "./series.js";
 import { err, warn } from "./findings.js";
@@ -294,6 +295,9 @@ function validateStoryFrontmatter(project, errors, warnings) {
   const queries = queryFindings(project);
   errors.push(...queries.errors);
   warnings.push(...queries.warnings);
+  const checks = checkDefinitionFindings(project);
+  errors.push(...checks.errors);
+  warnings.push(...checks.warnings);
   validateDeadline(data, errors);
   validateDailyTarget(data, errors);
   validateReleaseCadence(data, errors);
