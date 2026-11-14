@@ -54,7 +54,7 @@ Pick the route that matches what you came to do. Each one takes four pages; read
 | [Writing workflows](writing-workflows.md) | End-to-end sessions: testing a premise, plotting first, discovery drafting, scene craft, theme and voice, research, revision passes, line editing, feedback and editorial review, submission, self-publishing, and adaptation |
 | [Continuity and analysis](continuity.md) | The continuity engine (including travel times over location routes), exemptions, and the `knowledge`, `context`, `timeline`, `prose`, `voices`, `pacing`, `clues`, `grid`, `names`, `diagram`, `progress`, `compare`, `report`, `next`, and `doctor` commands |
 | [Writing in other languages](languages.md) | What works in each language and script: counting in words or characters, dialogue and sentences, word lists, build labels, fonts, right-to-left and vertical text, ids, and adding a language pack |
-| [Series](series.md) | Linking sequels and prequels, `story series`, carrying characters and facts between books, and laying out a short-story collection or anthology |
+| [Series](series.md) | Linking sequels and prequels, `story series`, carrying characters and facts between books, and laying out a short-story collection, anthology, or poetry collection |
 | [Import, export, and builds](manuscripts.md) | Importing an existing draft, front and back matter, publishing metadata, and building markdown, EPUB, DOCX, Shunn, HTML review copy, print interior, narration script, retailer metadata sheet, Fountain screenplay skeleton, Twine and ink stories, story bible site (codex), and synopsis output |
 | [Editor integration](editors.md) | `story lsp` in VS Code, Neovim, Helix, Emacs, and other editors: findings as you type, go to definition, references, hover, id completion, rename, and quick fixes |
 | [Automation and CI](automation.md) | The GitHub Actions templates (checks, scheduled drafting, and the review copy with its reader-note issue form), exit codes and output streams, and pre-commit hooks |
@@ -104,6 +104,7 @@ Pick the route that matches what you came to do. Each one takes four pages; read
 | Write a book in a language other than English | [Writing in other languages](languages.md) |
 | Write a sequel or prequel | [Series](series.md) |
 | Put together a short-story collection or anthology | [Series](series.md#short-story-collections-and-anthologies) |
+| Make a poetry collection | [Series](series.md#poetry-collections) |
 | Build an EPUB, DOCX, or submission manuscript | [Import, export, and builds](manuscripts.md#build-a-book) |
 | Build an HTML review copy, a print interior, a narration script, a retailer metadata sheet, or a screenplay skeleton | [Import, export, and builds](manuscripts.md) |
 | Browse or share the story bible as a website | [Story bible site](manuscripts.md#story-bible-site-codex) |
@@ -119,7 +120,7 @@ Pick the route that matches what you came to do. Each one takes four pages; read
 
 ## Example projects
 
-The repository includes eleven sample projects in [`examples/`](../examples/). The pages above use them for their sample output.
+The repository includes twelve sample projects in [`examples/`](../examples/). The pages above use them for their sample output.
 
 | Example | Shows |
 |---------|-------|
@@ -134,6 +135,7 @@ The repository includes eleven sample projects in [`examples/`](../examples/). T
 | [`quatre-heures-dix-sept`](../examples/quatre-heures-dix-sept/) | A short story in French (`language: fr`): dialogue in guillemets with French no-break spaces, the French word lists, and French build labels |
 | [`kirimi-eki-no-wasuremono`](../examples/kirimi-eki-no-wasuremono/) | A short story in Japanese (`language: ja`): counted in characters, `target-characters`, corner-bracket dialogue, and `writing-mode: vertical` |
 | [`laysat-lil-bay`](../examples/laysat-lil-bay/) | A short story in Arabic (`language: ar`): right-to-left builds and Arabic punctuation |
+| [`tide-tables`](../examples/tide-tables/) | A poetry collection of three poems (`form: poetry-collection`): verse chapters whose line breaks every build keeps, with no backslashes, and line counts in `story wordcount` |
 
 ## Other resources
 

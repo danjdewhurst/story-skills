@@ -66,7 +66,7 @@ story-skills/
 ├── skills/story-maintenance/scripts/story.js   # generated Node fallback CLI
 ├── schemas/story.schema.json     # JSON schema for project frontmatter
 ├── schemas/result.schema.json    # JSON schema for story <command> --json output
-├── examples/                     # eleven sample story projects (shipped in the npm package)
+├── examples/                     # twelve sample story projects (shipped in the npm package)
 ├── test/                         # Bun tests (*.test.js), helpers.js, setup.js
 ├── scripts/                      # check scripts and the release script
 ├── evals/                        # skill regression harness (repo tooling only)
@@ -440,6 +440,7 @@ the-gull-rock-light: 6 chapters, 550 words, 0 expected continuity findings
 the-last-ember: 1 chapters, 993 words, 0 expected continuity findings
 the-left-luggage-office: 3 chapters, 1158 words, 0 expected continuity findings
 the-unraveled-thread: 4 chapters, 111 words, 7 expected continuity findings
+tide-tables: 3 chapters, 200 words, 0 expected continuity findings
 ```
 
 A book [counted in characters](project-format.md#counting-in-characters), such as the Japanese example, reports its total in characters. The French, Japanese, and Arabic examples keep the checks honest for books not in English: none is in `EXPECTED_WARNINGS`, so each must pass every check with no warnings. A warning one of them keeps on purpose is dismissed in its `continuity/exemptions.md`, with the reason there.
@@ -469,7 +470,7 @@ node scripts/check-schema.js
 ```
 
 ```text
-Examples match schemas/story.schema.json: bo-and-the-missing-moon, harbor-of-second-light, kirimi-eki-no-wasuremono, laysat-lil-bay, quatre-heures-dix-sept, salt-and-lantern, the-fall-of-the-citadel, the-gull-rock-light, the-last-ember, the-left-luggage-office, the-unraveled-thread
+Examples match schemas/story.schema.json: bo-and-the-missing-moon, harbor-of-second-light, kirimi-eki-no-wasuremono, laysat-lil-bay, quatre-heures-dix-sept, salt-and-lantern, the-fall-of-the-citadel, the-gull-rock-light, the-last-ember, the-left-luggage-office, the-unraveled-thread, tide-tables
 ```
 
 `story validate` checks the same frontmatter with hand-written rules, so the two can drift. [`test/validate-schema-property.test.js`](https://github.com/danjdewhurst/story-skills/blob/main/test/validate-schema-property.test.js) keeps them in step. It writes a valid project with one of every entity, then over and over rewrites one field of one file with a generated value. The values cover:
