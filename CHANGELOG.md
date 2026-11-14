@@ -24,7 +24,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - `story submissions` reads the submission tracker: it lists the rows, counts each status, checks them, and flags replies awaited too long. See [submissions](docs/cli-reference.md#submissions).
   - It reads `submission/tracker.md` as the `submission` skill writes it, the book tracker and the short-fiction one, and never writes. A project with no tracker prints a short note and exits 0.
   - An unknown or empty status (`submission-invalid-status`), a date that is not `YYYY-MM-DD` (`submission-invalid-date`), a tracker with no tracker table (`submission-tracker-no-table`), or one with more than 10,000 rows (`submission-tracker-too-large`) is an error and exits 1.
-  - A row still waiting for a reply 90 days or more after the later of its Date Sent and Response Date is a `submission-overdue` warning. `--days <n>` changes the window and `--date` sets today. `--json` gives the rows and counts.
+  - A row still waiting for a reply 90 days or more after the later of its Date Sent and Response Date is a `submission-overdue` warning, and a date after today a `submission-date-in-future` warning. `--days <n>` changes the window and `--date` sets today. `--json` gives the rows and counts.
   - `story next` adds a `[P2] Follow up on submissions` action for those rows, and takes `--days` too. A row whose warning `severity` turns off or an exemption dismisses is not counted.
   - `cli-defaults` in `story.md` can set `days` for either command, and `story validate` checks it; `submissions --date` cannot be a default.
   - The `submission` skill runs the command instead of counting by hand, and its tracker template drops the hand-kept `## Summary` list.

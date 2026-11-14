@@ -1004,6 +1004,7 @@ var FINDING_CODES = {
   "submission-invalid-status": "error",
   "submission-invalid-date": "error",
   "submission-overdue": "warning",
+  "submission-date-in-future": "warning",
   "story-missing-at-ref": "warning",
   "similarity-shared-passage": "warning",
   "similarity-no-reference-text": "warning",
@@ -21903,17 +21904,20 @@ function plainCell(cell) {
 function headerName(cell) {
   return plainCell(cell).toLowerCase().replace(/\s+/g, " ");
 }
+function hasCellBreak(line) {
+  return /(?<!\\)\|/.test(line);
+}
 function trackerTables(lines, start) {
   const fenced = fencedLineIndexes(lines);
   const tables = [];
   for (let index = start;index < lines.length - 1; index += 1) {
-    if (fenced.has(index) || !lines[index].trim().startsWith("|") || !DELIMITER_ROW.test(lines[index + 1].trim())) {
+    if (fenced.has(index) || !hasCellBreak(lines[index]) || !DELIMITER_ROW.test(lines[index + 1].trim())) {
       continue;
     }
     const headers = tableCells(lines[index]).map(headerName);
     const rows = [];
     let next = index + 2;
-    for (;next < lines.length && !fenced.has(next) && lines[next].trim().startsWith("|"); next += 1) {
+    for (;next < lines.length && !fenced.has(next) && lines[next].trim() !== "" && hasCellBreak(lines[next]); next += 1) {
       rows.push({ line: next + 1, cells: tableCells(lines[next]) });
     }
     if (headers.includes("status") && headers.includes("date sent")) {
@@ -22019,6 +22023,11 @@ function checkRow(row, todayDays, days, result) {
   }
   const sent = rowDate(row, "dateSent", "Date Sent", label, result, { required: true });
   const response = rowDate(row, "responseDate", "Response Date", label, result, { required: false });
+  for (const [date, column] of [[sent, "Date Sent"], [response, "Response Date"]]) {
+    if (date !== undefined && date.days > todayDays) {
+      result.warnings.push(warn("submission-date-in-future", `${label}: ${column} ${date.text} is after today, ${formatDay(todayDays)}: check the year`, SUBMISSION_TRACKER));
+    }
+  }
   const since = [sent, response].filter((date) => date !== undefined).sort((left, right) => right.days - left.days)[0];
   row.waitingSince = null;
   row.waitingDays = null;
@@ -22034,6 +22043,9 @@ function checkRow(row, todayDays, days, result) {
     }
   }
   return row;
+}
+function formatDay(days) {
+  return new Date(days * 86400000).toISOString().slice(0, 10);
 }
 function rowDate(row, field, column, label, result, { required }) {
   if (row[field] === null) {
