@@ -1378,6 +1378,7 @@ describe("check-links", () => {
     const unzip = at('unzip -q "$zip"');
     const exportJar = at('echo "EPUBCHECK_JAR=$RUNNER_TEMP/epubcheck-${EPUBCHECK_VERSION}/epubcheck.jar" >> "$GITHUB_ENV"');
     expect(at("set -euo pipefail")).toBeGreaterThan(-1);
+    expect(lines[download]).toContain("--max-time 120 --retry-max-time 120");
     expect(lines[download]).toContain('-o "$zip" "https://github.com/w3c/epubcheck/releases/download/v${EPUBCHECK_VERSION}/epubcheck-${EPUBCHECK_VERSION}.zip"');
     expect(download).toBeGreaterThan(at("set -euo pipefail"));
     expect(check).toBeGreaterThan(download);

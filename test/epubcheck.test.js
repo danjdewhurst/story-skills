@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 import { crc32 } from "../src/packaging.js";
-import { buildBook, createStoryProject } from "../src/story.js";
+import { buildBook, createStoryProject, validateProject } from "../src/story.js";
 import { makeTempDir, readArchiveEntries, writeMarkdown } from "./helpers.js";
 
 // Set EPUBCHECK_JAR to an epubcheck.jar (https://github.com/w3c/epubcheck)
@@ -82,7 +82,7 @@ const RETAIL_FIELDS = [
   "publisher: Harbour Press",
   "publication-date: 2027-03-01",
   "description: A lamp keeper keeps a ledger of the tides.",
-  "subjects: [Fiction, Sea stories]",
+  "subjects: [FIC000000, FIC047000]",
   "build-style:",
   "  - preset: modern",
   "    drop-caps: true",
@@ -115,7 +115,7 @@ function featureBook() {
   writeMarkdown(path.join(root, "matter", "epigraph.md"), "title: Epigraph\nplacement: front\norder: 1\nheading: false", "\n> A ledger kept is a lamp lit.\n>\n> — *harbour saying*\n");
   writeMarkdown(path.join(root, "matter", "authors-note.md"), "title: Author's Note\nplacement: back\norder: 1", "\nThe harbour is invented.[^place] Its tides are not.\n\n[^place]: Any likeness to a real harbour is *chance*.\n");
 
-  chapter(root, "prologue", { title: "Before", extra: "number: 1\nnumbered: false\n" }, "The ledger came first.\n\n![The harbour map](../art/map.png)\n\n![The lamp](../art/lamp.gif)");
+  chapter(root, "chapter-01", { title: "Before", extra: "number: 1\nnumbered: false\n" }, "The ledger came first.\n\n![The harbour map](../art/map.png)\n\n![The lamp](../art/lamp.gif)");
   chapter(root, "chapter-02", { title: "The Lamp", extra: "number: 2\n" }, [
     "Mara lit the lamp ![a lamp](../art/lamp.gif) at dusk.[^dusk] The tide turned.[^tide]",
     "",
@@ -159,6 +159,9 @@ describe.skipIf(!jar)("EPUBCheck on the EPUB builds", () => {
 
   test("a book with a cover, retail metadata, images, footnotes, verse, a prologue, and a build style builds a valid EPUB", () => {
     const root = featureBook();
+    // No validation errors, so the book is one a writer could upload. The
+    // warnings left are upkeep (registries, word counts, scene records).
+    expect(validateProject(root).errors).toEqual([]);
     const result = buildBook(root, { format: "epub" });
     expect(result.warnings).toEqual([]);
     // The book must hold what it is meant to test, or a build that left a
@@ -172,10 +175,11 @@ describe.skipIf(!jar)("EPUBCheck on the EPUB builds", () => {
     expect(entries.has("OEBPS/images/cover.png")).toBe(true);
     expect(opf).toContain('properties="cover-image"');
     expect(text("OEBPS/cover.xhtml")).toContain('alt="A lamp on a ledger"');
-    for (const field of ["urn:isbn:9780306406157", "<dc:publisher>", "<dc:date>2027-03-01</dc:date>", "<dc:description>", "<dc:subject>Sea stories</dc:subject>"]) {
+    for (const field of ["urn:isbn:9780306406157", "<dc:publisher>", "<dc:date>2027-03-01</dc:date>", "<dc:description>", "<dc:subject>FIC047000</dc:subject>"]) {
       expect(opf).toContain(field);
     }
     expect(opf).toContain('href="extra.css"');
+    expect(text("OEBPS/style.css")).toContain("::first-letter");
     const chapters = ["chapter-01", "chapter-02", "chapter-03"].map((name) => text(`OEBPS/${name}.xhtml`));
     const documents = [...chapters, text("OEBPS/back-authors-note.xhtml")].join("\n");
     for (const extension of ["png", "gif", "jpg", "webp"]) {
@@ -186,6 +190,8 @@ describe.skipIf(!jar)("EPUBCheck on the EPUB builds", () => {
     expect(documents.match(/epub:type="footnote"/g)?.length).toBe(4);
     expect(chapters[0]).toContain("<h1>Before</h1>");
     expect(chapters[1]).toContain("Chapter 1: The Lamp");
+    expect(chapters[1]).toContain('<p class="scene-break">• • •</p>');
+    expect(chapters[1]).toContain('<body epub:type="bodymatter chapter" class="chapter">');
     expect(chapters[2]).toContain("<br/>and comes back with the boats.");
     expect(epubcheck(result.outFile)).toEqual({ status: 0, problems: [] });
   }, TEST_TIMEOUT);
