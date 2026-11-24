@@ -7,12 +7,22 @@ updates:
   # needs the same SHA in templates/github/ by hand, and the pin check in
   # test/check-scripts.test.js fails until they match. Grouping by dependency
   # name puts one action's bump in a single pull request.
+  #
+  # Dependabot names each sub-action of github/codeql-action (init, analyze,
+  # upload-sarif) as a dependency of its own, so group-by: dependency-name
+  # would split one release into one pull request per step. CodeQL refuses to
+  # run when the steps of a workflow use different versions, so each of those
+  # pull requests fails on its own. The codeql-action group comes first, since
+  # Dependabot puts a dependency in the first group whose patterns match it.
   - package-ecosystem: "github-actions"
     directories:
       - "/"
     schedule:
       interval: "weekly"
     groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
       github-actions:
         group-by: dependency-name
         patterns:
