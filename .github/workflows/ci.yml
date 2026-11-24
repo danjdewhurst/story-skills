@@ -112,8 +112,10 @@ jobs:
   # refuse a book that fails it.
   # epubcheck.test.js skips without EPUBCHECK_JAR, so this job downloads a
   # pinned release, checks its SHA-256, and runs that file. The runner image's
-  # Java runs the jar. To bump EPUBCHECK_VERSION, take the new zip's SHA-256
-  # from the release page and change both lines together.
+  # Java runs the jar. Nothing proposes bumps. To bump EPUBCHECK_VERSION,
+  # pick a release at least two weeks old, check that the SHA-256 of the zip
+  # you download matches the digest on the release page, and change both
+  # lines together.
   epubcheck:
     name: EPUBCheck
     runs-on: ubuntu-latest
@@ -139,7 +141,7 @@ jobs:
         run: |
           set -euo pipefail
           zip="$RUNNER_TEMP/epubcheck.zip"
-          curl -fsSL --retry 3 -o "$zip" "https://github.com/w3c/epubcheck/releases/download/v${EPUBCHECK_VERSION}/epubcheck-${EPUBCHECK_VERSION}.zip"
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors --max-time 120 -o "$zip" "https://github.com/w3c/epubcheck/releases/download/v${EPUBCHECK_VERSION}/epubcheck-${EPUBCHECK_VERSION}.zip"
           echo "${EPUBCHECK_SHA256}  $zip" | sha256sum --check --strict -
           unzip -q "$zip" -d "$RUNNER_TEMP"
           echo "EPUBCHECK_JAR=$RUNNER_TEMP/epubcheck-${EPUBCHECK_VERSION}/epubcheck.jar" >> "$GITHUB_ENV"

@@ -1365,14 +1365,28 @@ describe("check-links", () => {
   test("ci checks the EPUB builds with a pinned, verified EPUBCheck", () => {
     // epubcheck.test.js skips without EPUBCHECK_JAR, so CI must fetch the
     // jar, check its hash, prove it runs, and then run that file.
+    // The download step must check the zip it fetched before it unpacks it
+    // or names the jar, and nothing may let a failed check pass.
     const job = workflowJobs(readRepo(".github/workflows/ci.yml")).epubcheck;
     expect(job).toBeDefined();
     expect(job).toMatch(/EPUBCHECK_VERSION: "\d+\.\d+\.\d+"/);
     expect(job).toMatch(/EPUBCHECK_SHA256: "[0-9a-f]{64}"/);
-    expect(job).toContain("sha256sum --check --strict -");
-    expect(job).toContain('echo "EPUBCHECK_JAR=');
-    expect(job).toContain('java -jar "$EPUBCHECK_JAR" --version');
-    expect(job).toContain("bun test --timeout 60000 ./test/epubcheck.test.js");
+    const lines = job.split("\n").map((line) => line.trim()).filter((line) => line !== "" && !line.startsWith("#"));
+    const at = (text) => lines.findIndex((line) => line.includes(text));
+    const download = at('curl -fsSL --proto \'=https\'');
+    const check = lines.indexOf('echo "${EPUBCHECK_SHA256}  $zip" | sha256sum --check --strict -');
+    const unzip = at('unzip -q "$zip"');
+    const exportJar = at('echo "EPUBCHECK_JAR=$RUNNER_TEMP/epubcheck-${EPUBCHECK_VERSION}/epubcheck.jar" >> "$GITHUB_ENV"');
+    expect(at("set -euo pipefail")).toBeGreaterThan(-1);
+    expect(lines[download]).toContain('-o "$zip" "https://github.com/w3c/epubcheck/releases/download/v${EPUBCHECK_VERSION}/epubcheck-${EPUBCHECK_VERSION}.zip"');
+    expect(download).toBeGreaterThan(at("set -euo pipefail"));
+    expect(check).toBeGreaterThan(download);
+    expect(unzip).toBeGreaterThan(check);
+    expect(exportJar).toBeGreaterThan(unzip);
+    expect(job).not.toContain("|| true");
+    expect(job).not.toContain("continue-on-error");
+    expect(at('java -jar "$EPUBCHECK_JAR" --version')).toBeGreaterThan(exportJar);
+    expect(at("bun test --timeout 60000 ./test/epubcheck.test.js")).toBeGreaterThan(at('java -jar "$EPUBCHECK_JAR" --version'));
   });
 });
 
