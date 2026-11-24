@@ -108,6 +108,50 @@ jobs:
       - name: Render the print contents
         run: bun test --timeout 60000 ./test/html-build.test.js
 
+  # Retailers such as Apple Books and Kobo check uploads with EPUBCheck and
+  # refuse a book that fails it.
+  # epubcheck.test.js skips without EPUBCHECK_JAR, so this job downloads a
+  # pinned release, checks its SHA-256, and runs that file. The runner image's
+  # Java runs the jar. To bump EPUBCHECK_VERSION, take the new zip's SHA-256
+  # from the release page and change both lines together.
+  epubcheck:
+    name: EPUBCheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      EPUBCHECK_VERSION: "5.4.0"
+      EPUBCHECK_SHA256: "33350c61038e71dfb3d45a76aed04bf5481e6d5500cb780f6e98db8bbd15a28c"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Download and verify EPUBCheck
+        run: |
+          set -euo pipefail
+          zip="$RUNNER_TEMP/epubcheck.zip"
+          curl -fsSL --retry 3 -o "$zip" "https://github.com/w3c/epubcheck/releases/download/v${EPUBCHECK_VERSION}/epubcheck-${EPUBCHECK_VERSION}.zip"
+          echo "${EPUBCHECK_SHA256}  $zip" | sha256sum --check --strict -
+          unzip -q "$zip" -d "$RUNNER_TEMP"
+          echo "EPUBCHECK_JAR=$RUNNER_TEMP/epubcheck-${EPUBCHECK_VERSION}/epubcheck.jar" >> "$GITHUB_ENV"
+
+      - name: Check EPUBCheck runs
+        run: |
+          java -version
+          java -jar "$EPUBCHECK_JAR" --version
+
+      - name: Check the EPUB builds with EPUBCheck
+        run: bun test --timeout 60000 ./test/epubcheck.test.js
+
   # The full suite on macOS, so path separators, line endings, and
   # file-system differences are caught before a release. Windows is
   # test-windows: the same suite there is dominated by NTFS and Defender, so
