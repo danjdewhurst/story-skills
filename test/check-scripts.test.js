@@ -217,11 +217,15 @@ function publishGateProblems(text) {
 
 // Lists each action that more than one SHA pins across the given files, so a
 // bump that reaches ci.yml but not another workflow or a template is caught.
+// Sub-actions of one repository, such as github/codeql-action/init and
+// github/codeql-action/analyze, count as one action: they ship in one release,
+// and CodeQL refuses to run when they are on different versions.
 function actionPinConflicts(files) {
   const shas = new Map();
   for (const [relativePath, text] of Object.entries(files)) {
     for (const { ref } of usesRefs(text)) {
-      const [action, sha] = ref.split("@");
+      const [path, sha] = ref.split("@");
+      const action = path.split("/").slice(0, 2).join("/");
       const bySha = shas.get(action) || new Map();
       bySha.set(sha, [...(bySha.get(sha) || []), relativePath]);
       shas.set(action, bySha);
@@ -1367,6 +1371,18 @@ describe("github workflows", () => {
     ]);
   });
 
+  test("sub-actions of one repository on different SHAs are a pin conflict", () => {
+    const files = {
+      ".github/workflows/codeql.yml": `        uses: github/codeql-action/init@${"b".repeat(40)} # v4.39.3\n        uses: github/codeql-action/analyze@${"a".repeat(40)} # v4.39.1\n`,
+      ".github/workflows/scorecard.yml": `        uses: github/codeql-action/upload-sarif@${"a".repeat(40)} # v4.39.1\n`
+    };
+    expect(actionPinConflicts(files)).toEqual([
+      `github/codeql-action: ${"b".repeat(40)} (.github/workflows/codeql.yml), ${"a".repeat(40)} (.github/workflows/codeql.yml, .github/workflows/scorecard.yml)`
+    ]);
+    const bumped = Object.fromEntries(Object.entries(files).map(([file, text]) => [file, text.replaceAll("a".repeat(40), "b".repeat(40))]));
+    expect(actionPinConflicts(bumped)).toEqual([]);
+  });
+
   test("one action SHA carries one version comment everywhere", () => {
     // A bare `# v7` beside the SHA another file labels `# v7.0.1` hides which
     // release is pinned and stops the files reading as identical pins.
@@ -1942,6 +1958,11 @@ describe("github workflows", () => {
     expect(dependabot).toMatch(/^\s+- "\/"$/m);
     expect(dependabot).not.toMatch(/^\s+- "\/templates\/github"$/m);
     expect(dependabot).toMatch(/^\s+group-by: dependency-name$/m);
+    // group-by: dependency-name splits codeql-action's sub-actions into one
+    // pull request each, so a group with no group-by must claim them first.
+    const codeqlGroup = dependabot.search(/^ {6}codeql-action:\n {8}patterns:\n {10}- "github\/codeql-action\*"$/m);
+    expect(codeqlGroup).toBeGreaterThan(-1);
+    expect(codeqlGroup).toBeLessThan(dependabot.search(/^\s+group-by: dependency-name$/m));
   });
 });
 
