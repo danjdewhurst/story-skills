@@ -215,17 +215,57 @@ function publishGateProblems(text) {
   return problems;
 }
 
+// The owner/repo part of an action path: github/codeql-action/init gives
+// github/codeql-action.
+function actionRepository(actionPath) {
+  return actionPath.split("/").slice(0, 2).join("/");
+}
+
+// The lines of one group under `groups:` in dependabot.yml, from its key to
+// the next key at the same indent.
+function dependabotGroup(text, name) {
+  const lines = text.split("\n");
+  const start = lines.indexOf(`      ${name}:`);
+  if (start === -1) {
+    return null;
+  }
+  const end = lines.findIndex((line, index) => index > start && /^ {0,6}\S/.test(line));
+  return lines.slice(start, end === -1 ? lines.length : end);
+}
+
+// The quoted entries of one list key, such as patterns:, in a group's lines.
+function dependabotGroupList(groupLines, key) {
+  const start = groupLines.indexOf(`        ${key}:`);
+  if (start === -1) {
+    return [];
+  }
+  const entries = [];
+  for (const line of groupLines.slice(start + 1)) {
+    const entry = /^ {10}- ["']([^"']+)["']$/.exec(line);
+    if (!entry) {
+      break;
+    }
+    entries.push(entry[1]);
+  }
+  return entries;
+}
+
+function globMatches(pattern, name) {
+  const escaped = pattern.split("*").map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"));
+  return new RegExp(`^${escaped.join(".*")}$`).test(name);
+}
+
 // Lists each action that more than one SHA pins across the given files, so a
 // bump that reaches ci.yml but not another workflow or a template is caught.
 // Sub-actions of one repository, such as github/codeql-action/init and
 // github/codeql-action/analyze, count as one action: they ship in one release,
-// and CodeQL refuses to run when they are on different versions.
+// and CodeQL refuses to run when init and analyze are on different versions.
 function actionPinConflicts(files) {
   const shas = new Map();
   for (const [relativePath, text] of Object.entries(files)) {
     for (const { ref } of usesRefs(text)) {
-      const [path, sha] = ref.split("@");
-      const action = path.split("/").slice(0, 2).join("/");
+      const [actionPath, sha] = ref.split("@");
+      const action = actionRepository(actionPath);
       const bySha = shas.get(action) || new Map();
       bySha.set(sha, [...(bySha.get(sha) || []), relativePath]);
       shas.set(action, bySha);
@@ -1389,7 +1429,10 @@ describe("github workflows", () => {
     const comments = new Map();
     for (const relativePath of pinnedFiles) {
       for (const { ref, comment } of usesRefs(readRepo(relativePath))) {
-        comments.set(ref, [...new Set([...(comments.get(ref) || []), comment])]);
+        // Sub-actions of one repository share a release, so they share a label.
+        const [actionPath, sha] = ref.split("@");
+        const key = `${actionRepository(actionPath)}@${sha}`;
+        comments.set(key, [...new Set([...(comments.get(key) || []), comment])]);
       }
     }
     const drift = [...comments].filter(([, labels]) => labels.length > 1).map(([ref, labels]) => `${ref}: ${labels.join(" vs ")}`);
@@ -1958,11 +2001,51 @@ describe("github workflows", () => {
     expect(dependabot).toMatch(/^\s+- "\/"$/m);
     expect(dependabot).not.toMatch(/^\s+- "\/templates\/github"$/m);
     expect(dependabot).toMatch(/^\s+group-by: dependency-name$/m);
-    // group-by: dependency-name splits codeql-action's sub-actions into one
-    // pull request each, so a group with no group-by must claim them first.
-    const codeqlGroup = dependabot.search(/^ {6}codeql-action:\n {8}patterns:\n {10}- "github\/codeql-action\*"$/m);
-    expect(codeqlGroup).toBeGreaterThan(-1);
-    expect(codeqlGroup).toBeLessThan(dependabot.search(/^\s+group-by: dependency-name$/m));
+  });
+
+  test("dependabot bumps every codeql-action step in one pull request", () => {
+    // group-by: dependency-name gives each codeql-action sub-action its own
+    // pull request, and CodeQL fails when init and analyze differ. A group
+    // with no group-by must take every step the workflows use, and the
+    // catch-all group must leave them out.
+    const dependabot = readRepo(".github/dependabot.yml");
+    const codeql = dependabotGroup(dependabot, "codeql-action");
+    const catchAll = dependabotGroup(dependabot, "github-actions");
+    expect(codeql).not.toBeNull();
+    expect(catchAll).not.toBeNull();
+    expect(codeql.join("\n")).not.toMatch(/group-by:/);
+    const steps = repoWorkflowFiles
+      .flatMap((relativePath) => usesRefs(readRepo(relativePath)))
+      .map(({ ref }) => ref.split("@")[0])
+      .filter((actionPath) => actionRepository(actionPath) === "github/codeql-action");
+    expect(steps.length).toBeGreaterThan(1);
+    for (const step of steps) {
+      expect(dependabotGroupList(codeql, "patterns").some((pattern) => globMatches(pattern, step)), step).toBe(true);
+      expect(dependabotGroupList(catchAll, "exclude-patterns").some((pattern) => globMatches(pattern, step)), step).toBe(true);
+    }
+  });
+
+  test("the dependabot group helpers read one group's lists", () => {
+    const text = [
+      "    groups:",
+      "      first:",
+      "        patterns:",
+      "          - 'a/b*'",
+      "        group-by: dependency-name",
+      "      second:",
+      "        patterns:",
+      '          - "*"',
+      "  - package-ecosystem: npm"
+    ].join("\n");
+    const first = dependabotGroup(text, "first");
+    expect(first).toHaveLength(4);
+    expect(dependabotGroupList(first, "patterns")).toEqual(["a/b*"]);
+    expect(dependabotGroupList(first, "exclude-patterns")).toEqual([]);
+    expect(dependabotGroup(text, "second")).toHaveLength(3);
+    expect(dependabotGroup(text, "missing")).toBeNull();
+    expect(globMatches("a/b*", "a/b/c")).toBe(true);
+    expect(globMatches("a/b*", "x/a/b")).toBe(false);
+    expect(globMatches("a.b", "aXb")).toBe(false);
   });
 });
 

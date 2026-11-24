@@ -11,9 +11,10 @@ updates:
   # Dependabot names each sub-action of github/codeql-action (init, analyze,
   # upload-sarif) as a dependency of its own, so group-by: dependency-name
   # would split one release into one pull request per step. CodeQL refuses to
-  # run when the steps of a workflow use different versions, so each of those
-  # pull requests fails on its own. The codeql-action group comes first, since
-  # Dependabot puts a dependency in the first group whose patterns match it.
+  # run when init and analyze use different versions, and the pin check in
+  # test/check-scripts.test.js wants one SHA for every step of one action
+  # repository, upload-sarif included. So the codeql-action group, with no
+  # group-by, takes all of them, and the catch-all group excludes them.
   - package-ecosystem: "github-actions"
     directories:
       - "/"
@@ -27,6 +28,8 @@ updates:
         group-by: dependency-name
         patterns:
           - "*"
+        exclude-patterns:
+          - "github/codeql-action*"
   # The documentation website's build tools (site/package.json). Nothing
   # here ships in the npm package or runs in the CLI. One pull request a
   # week holds every bump, since VitePress and the Mermaid plugin move
