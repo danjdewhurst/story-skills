@@ -221,16 +221,34 @@ function actionRepository(actionPath) {
   return actionPath.split("/").slice(0, 2).join("/");
 }
 
+// The text of one `updates:` entry in dependabot.yml, from its
+// package-ecosystem line to the next entry.
+function dependabotEcosystem(text, ecosystem) {
+  const lines = text.split("\n");
+  const start = lines.indexOf(`  - package-ecosystem: "${ecosystem}"`);
+  if (start === -1) {
+    return "";
+  }
+  const end = lines.findIndex((line, index) => index > start && /^ {0,2}-/.test(line));
+  return lines.slice(start, end === -1 ? lines.length : end).join("\n");
+}
+
 // The lines of one group under `groups:` in dependabot.yml, from its key to
-// the next key at the same indent.
+// the next key at the same indent. Comment lines do not end a group, since
+// YAML ignores them.
 function dependabotGroup(text, name) {
   const lines = text.split("\n");
   const start = lines.indexOf(`      ${name}:`);
   if (start === -1) {
     return null;
   }
-  const end = lines.findIndex((line, index) => index > start && /^ {0,6}\S/.test(line));
+  const end = lines.findIndex((line, index) => index > start && /^ {0,6}[^\s#]/.test(line));
   return lines.slice(start, end === -1 ? lines.length : end);
+}
+
+// The keys of a group, such as patterns: and group-by:.
+function dependabotGroupKeys(groupLines) {
+  return groupLines.map((line) => /^ {8}([\w-]+):/.exec(line)?.[1]).filter(Boolean);
 }
 
 // The quoted entries of one list key, such as patterns:, in a group's lines.
@@ -2008,37 +2026,55 @@ describe("github workflows", () => {
     // pull request, and CodeQL fails when init and analyze differ. A group
     // with no group-by must take every step the workflows use, and the
     // catch-all group must leave them out.
-    const dependabot = readRepo(".github/dependabot.yml");
-    const codeql = dependabotGroup(dependabot, "codeql-action");
-    const catchAll = dependabotGroup(dependabot, "github-actions");
+    const actions = dependabotEcosystem(readRepo(".github/dependabot.yml"), "github-actions");
+    const codeql = dependabotGroup(actions, "codeql-action");
+    const catchAll = dependabotGroup(actions, "github-actions");
     expect(codeql).not.toBeNull();
     expect(catchAll).not.toBeNull();
-    expect(codeql.join("\n")).not.toMatch(/group-by:/);
-    const steps = repoWorkflowFiles
-      .flatMap((relativePath) => usesRefs(readRepo(relativePath)))
-      .map(({ ref }) => ref.split("@")[0])
-      .filter((actionPath) => actionRepository(actionPath) === "github/codeql-action");
+    // Only patterns: — a group-by would split the steps again, and a filter
+    // such as update-types would leave some releases in no group.
+    expect(dependabotGroupKeys(codeql)).toEqual(["patterns"]);
+    const actionPaths = [...new Set(repoWorkflowFiles.flatMap((relativePath) => usesRefs(readRepo(relativePath))).map(({ ref }) => ref.split("@")[0]))];
+    const steps = actionPaths.filter((actionPath) => actionRepository(actionPath) === "github/codeql-action");
+    const others = actionPaths.filter((actionPath) => actionRepository(actionPath) !== "github/codeql-action");
     expect(steps.length).toBeGreaterThan(1);
+    expect(others.length).toBeGreaterThan(0);
+    const inGroup = (patterns, actionPath) => patterns.some((pattern) => globMatches(pattern, actionPath));
+    const codeqlPatterns = dependabotGroupList(codeql, "patterns");
+    const excluded = dependabotGroupList(catchAll, "exclude-patterns");
     for (const step of steps) {
-      expect(dependabotGroupList(codeql, "patterns").some((pattern) => globMatches(pattern, step)), step).toBe(true);
-      expect(dependabotGroupList(catchAll, "exclude-patterns").some((pattern) => globMatches(pattern, step)), step).toBe(true);
+      expect(inGroup(codeqlPatterns, step), step).toBe(true);
+      expect(inGroup(excluded, step), step).toBe(true);
+    }
+    // Every other action stays in the catch-all group, one pull request each.
+    for (const other of others) {
+      expect(inGroup(codeqlPatterns, other), other).toBe(false);
+      expect(inGroup(excluded, other), other).toBe(false);
     }
   });
 
   test("the dependabot group helpers read one group's lists", () => {
     const text = [
+      '  - package-ecosystem: "github-actions"',
       "    groups:",
       "      first:",
       "        patterns:",
       "          - 'a/b*'",
+      "      # a comment does not end the group",
       "        group-by: dependency-name",
       "      second:",
       "        patterns:",
       '          - "*"',
-      "  - package-ecosystem: npm"
+      '  - package-ecosystem: "npm"',
+      "    groups:",
+      "      third:"
     ].join("\n");
     const first = dependabotGroup(text, "first");
-    expect(first).toHaveLength(4);
+    expect(first).toHaveLength(5);
+    expect(dependabotGroupKeys(first)).toEqual(["patterns", "group-by"]);
+    expect(dependabotGroup(dependabotEcosystem(text, "github-actions"), "third")).toBeNull();
+    expect(dependabotGroup(dependabotEcosystem(text, "npm"), "third")).toHaveLength(1);
+    expect(dependabotEcosystem(text, "pip")).toBe("");
     expect(dependabotGroupList(first, "patterns")).toEqual(["a/b*"]);
     expect(dependabotGroupList(first, "exclude-patterns")).toEqual([]);
     expect(dependabotGroup(text, "second")).toHaveLength(3);
