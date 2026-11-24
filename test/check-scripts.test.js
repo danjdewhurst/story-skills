@@ -1361,6 +1361,19 @@ describe("check-links", () => {
     expect(jobs["print-render"]).toContain("sudo apt-get install -y weasyprint poppler-utils");
     expect(jobs["print-render"]).toContain("bun test --timeout 60000 ./test/html-build.test.js");
   });
+
+  test("ci checks the EPUB builds with a pinned, verified EPUBCheck", () => {
+    // epubcheck.test.js skips without EPUBCHECK_JAR, so CI must fetch the
+    // jar, check its hash, prove it runs, and then run that file.
+    const job = workflowJobs(readRepo(".github/workflows/ci.yml")).epubcheck;
+    expect(job).toBeDefined();
+    expect(job).toMatch(/EPUBCHECK_VERSION: "\d+\.\d+\.\d+"/);
+    expect(job).toMatch(/EPUBCHECK_SHA256: "[0-9a-f]{64}"/);
+    expect(job).toContain("sha256sum --check --strict -");
+    expect(job).toContain('echo "EPUBCHECK_JAR=');
+    expect(job).toContain('java -jar "$EPUBCHECK_JAR" --version');
+    expect(job).toContain("bun test --timeout 60000 ./test/epubcheck.test.js");
+  });
 });
 
 describe("github workflows", () => {
