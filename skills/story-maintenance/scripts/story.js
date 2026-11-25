@@ -21943,13 +21943,18 @@ function escapeProperty(text) {
   return escapeData(text).replace(/:/g, "%3A").replace(/,/g, "%2C");
 }
 var SUMMARY_CELL_LIMIT = 500;
+function codeSpan(text) {
+  if (text === "") {
+    return "";
+  }
+  const longest = Math.max(0, ...Array.from(text.matchAll(/`+/g), ([run]) => run.length));
+  const fence = "`".repeat(longest + 1);
+  return `${fence} ${text} ${fence}`;
+}
 function codeCell(text) {
   const characters = Array.from(String(text));
   const cut = characters.length > SUMMARY_CELL_LIMIT ? `${characters.slice(0, SUMMARY_CELL_LIMIT).join("")}…` : characters.join("");
-  const value = outputText(cut).replace(/\|/g, "\\|");
-  const longest = Math.max(0, ...Array.from(value.matchAll(/`+/g), ([run]) => run.length));
-  const fence = "`".repeat(longest + 1);
-  return `${fence} ${value} ${fence}`;
+  return outputText(cut).split("|").map(codeSpan).join("\\|");
 }
 function realPath(filePath) {
   try {

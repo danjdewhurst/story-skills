@@ -138,7 +138,16 @@ describe("GitHub annotation output", () => {
     ]);
     const summary = githubSummary([{ level: "error", finding, file: "chapters/a.md", line: 3, endLine: 4 }], { errors: [finding], warnings: [], dismissed: [] }, "Story checks");
     const row = summary.split("\n").find((line) => line.startsWith("| error |"));
-    expect(row).toBe(String.raw`| error | ${"`"} chapters/a.md ${"`"} | 3 | ${"`"} lists x\u000a::error::injected 100% \| [link](https://example.com) <b> ${"`"} | ${"`"} posthumous-appearance ${"`"} |`);
+    expect(row).toBe(String.raw`| error | ${"`"} chapters/a.md ${"`"} | 3 | ${"`"} lists x\u000a::error::injected 100%  ${"`"}\|${"`"}  [link](https://example.com) <b> ${"`"} | ${"`"} posthumous-appearance ${"`"} |`);
+  });
+
+  test("a backslash in project text never comes just before an escaped pipe", () => {
+    const finding = warn("promise-unpaid", String.raw`a\|b\||c|`, null);
+    const summary = githubSummary([{ level: "warning", finding, file: null, line: null, endLine: null }], { errors: [], warnings: [finding], dismissed: [] }, "Story checks");
+    const row = summary.split("\n").find((line) => line.startsWith("| warning |"));
+    expect(row).toBe(String.raw`| warning |  |  | ${"`"} a\ ${"`"}\|${"`"} b\ ${"`"}\|\|${"`"} c ${"`"}\| | ${"`"} promise-unpaid ${"`"} |`);
+    // Every pipe in the cell that the text put there has a backtick, never a backslash, before its escape.
+    expect(row.match(/[^`|]\\\|/g)).toBeNull();
   });
 
   test("summary cells are code spans, so a bare web address or backticks in project text add no link or markup", () => {

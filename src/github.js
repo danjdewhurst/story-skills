@@ -41,20 +41,28 @@ function escapeProperty(text) {
 // for one step.
 export const SUMMARY_CELL_LIMIT = 500;
 
-// Text in a markdown table cell, as a code span: GitHub reads no markdown,
-// HTML, or bare web address inside one, so a finding that quotes project
-// text cannot add a link, an image, a tag, or emphasis. Control characters
-// are escaped, the fence is one backtick longer than any run of backticks in
-// the text, and a space pads each side, which the code span drops again. A
-// `|` is backslash-escaped, which the table reads before the code span, so
-// it cannot add a column.
+// Text as a code span: GitHub reads no markdown, HTML, or bare web address
+// inside one. The fence is one backtick longer than any run of backticks in
+// the text, and a space pads each side, which the code span drops again.
+function codeSpan(text) {
+  if (text === "") {
+    return "";
+  }
+  const longest = Math.max(0, ...Array.from(text.matchAll(/`+/g), ([run]) => run.length));
+  const fence = "`".repeat(longest + 1);
+  return `${fence} ${text} ${fence}`;
+}
+
+// Text in a markdown table cell, as code spans, so a finding that quotes
+// project text cannot add a link, an image, a tag, or emphasis. Control
+// characters are escaped. A `|` would end the cell even inside a code span,
+// so the text is split at each one, and the pipes go between the spans as
+// `\|`: a backslash from the text stays inside its span and never comes just
+// before one of them, so it cannot unescape a pipe and add a column.
 function codeCell(text) {
   const characters = Array.from(String(text));
   const cut = characters.length > SUMMARY_CELL_LIMIT ? `${characters.slice(0, SUMMARY_CELL_LIMIT).join("")}…` : characters.join("");
-  const value = outputText(cut).replace(/\|/g, "\\|");
-  const longest = Math.max(0, ...Array.from(value.matchAll(/`+/g), ([run]) => run.length));
-  const fence = "`".repeat(longest + 1);
-  return `${fence} ${value} ${fence}`;
+  return outputText(cut).split("|").map(codeSpan).join("\\|");
 }
 
 // A path that resolves symlinks where it can, so a workspace reached through
