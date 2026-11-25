@@ -10,6 +10,12 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ### Added
 
+- `story check --format github` puts each finding on its file and line in a GitHub pull request, and lists the findings on the run's summary page. See [Annotations in GitHub Actions](docs/automation.md#annotations-in-github-actions).
+  - Each error and warning is printed to stdout as a workflow command (`::error file=chapters/chapter-04.md,line=9,endLine=9,title=posthumous-appearance::…`), on the line the language server underlines. The file is relative to `GITHUB_WORKSPACE`, so a project in a subdirectory works. Dismissed findings are not annotated.
+  - When `GITHUB_STEP_SUMMARY` is set, a table of up to 200 findings is added to the run's summary page. Project text in both is escaped, so it cannot start a workflow command or add a link.
+  - The text report on stderr and the exit code do not change, and `--json` takes precedence. `--format text` is the default.
+  - The `story-checks.yml` and `review-copy.yml` templates now run `story check "$STORY_DIR" --format github`. Bump `STORY_VERSION` to the release that has it before you copy the new line into an older workflow.
+
 - `story collect` assembles a short-story collection from the story projects its `story.md` `stories` list names, so each story is edited only in its own project. ([#885](https://github.com/danjdewhurst/story-skills/issues/885))
   - `stories` lists the story project folders beside the collection, in reading order, such as `stories: [../low-tide, ../salt]`. `story links` reports an entry that is missing, not a story project, not a sibling folder, the collection itself, or a repeat (the `collection-story-*` codes).
   - Each story becomes one chapter, as `story import` makes one from the story's chapter file, with the story's writer in `author` when they are not the collection's own author. The report says which stories were `added`, `changed` since the last run, or `unchanged`.

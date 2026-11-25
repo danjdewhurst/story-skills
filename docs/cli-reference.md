@@ -937,7 +937,7 @@ The linking rules are in [Core concepts](concepts.md#links-and-backlinks) and th
 ### check
 
 ```text
-story check [path] [--strict] [--json]
+story check [path] [--strict] [--format text|github] [--json]
 ```
 
 Runs [`validate`](#validate), [`links`](#links), and [`continuity`](#continuity) over one scan of the project and exits once, with the same [exit codes](#output-streams-and-exit-codes): `1` when any of them reports an error. Each check alone misses problems the others catch: `validate` passes a chapter with `pov: nobody-here`, which only `links` reports.
@@ -947,6 +947,7 @@ Each finding is reported once. A file that fails to parse, which every check rep
 | Option | Effect |
 |---|---|
 | `--strict` | Fail on warnings too: every warning is reported as an error and the run exits 1. Dismissed findings stay dismissed. |
+| `--format github` | Also print each error and warning to stdout as a GitHub Actions workflow command (`::error file=…,line=…::…`), so GitHub shows it on its file and line, and, when `GITHUB_STEP_SUMMARY` is set, add a table of the findings to the run's summary page. The text report and the exit code do not change. `--format text`, the default, prints only the text report. See [Annotations in GitHub Actions](automation.md#annotations-in-github-actions). |
 
 Using [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/), whose only findings come from `continuity`:
 
@@ -4157,7 +4158,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--restore` | `<name>` | `snapshot` | Puts the snapshot back over the project instead of taking one, after saving the project as `before-restore-<id>-<n>`; deletes markdown files the snapshot lacks, and the folders that leaves empty |
 | `--path` | `<path>` | Every command except `init`, `import`, and `lsp` | Project root |
 | `--out` | `<file>` | `export`, `build`, `synopsis`, `diagram` | Relative to the project root; a folder for `build --format codex` and `--format post` |
-| `--format` | `<name>` | `build`, `grid` | For `build`: `markdown`, `md`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, `ics`, `codex`, `post`. For `grid`: `markdown` (default), `csv` |
+| `--format` | `<name>` | `build`, `check`, `grid` | For `build`: `markdown`, `md`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, `ics`, `codex`, `post`. For `check`: `text` (default), `github`. For `grid`: `markdown` (default), `csv` |
 | `--trim` | `<size>` | `build` | Only with `--format print`: `5x8`, `5.25x8`, `5.5x8.5` (default), `6x9`, `a5` |
 | `--paper` | `<letter\|a4>` | `build` | Only with `--format shunn --pdf` or `--format docx --shunn`: `letter` (default) or `a4` |
 | `--stamp` | `<label>` | `build` | Only with `--format html`: a build label printed in the review copy |

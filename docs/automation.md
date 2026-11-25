@@ -188,6 +188,18 @@ A build job can read the file it made from `writes`, or from `data.outFile`, rat
 story build --format epub --json | jq -r '.data.outFile'
 ```
 
+### Annotations in GitHub Actions
+
+`story check --format github` prints each error and warning as a GitHub Actions workflow command on stdout, such as:
+
+```text
+::error file=chapters/chapter-04.md,line=9,endLine=9,title=posthumous-appearance::lists edran-vale, who died in chapter-02; move posthumous appearances to mentions
+```
+
+GitHub shows each one as an annotation on that file and line, in the pull request and on the run's page. The file is relative to the repository root (`GITHUB_WORKSPACE`, else the working directory), so a project in a subdirectory still points at the right file. The line is the one the [language server](editors.md) underlines. A finding about no file, or about a file that cannot be read, is still annotated, without a place. Dismissed findings are not annotated. When the job sets `GITHUB_STEP_SUMMARY`, as GitHub Actions does, `check` also adds a table of the findings to the run's summary page, with at most 200 rows.
+
+The text report still goes to stderr, and the exit code is the same as without `--format github`. `--json` takes precedence and prints only the JSON result. GitHub shows only a limited number of annotations for each step, so on a project with many findings, the job log and the summary table have the full list. Project text in an annotation or the table is escaped, so a finding that quotes a chapter cannot start a workflow command of its own or add a link.
+
 ### Failing on warnings
 
 Warnings are advisory, so a project can pass with stale data. For example, a chapter whose `word-count` frontmatter is out of date passes `validate`:
@@ -328,10 +340,12 @@ To make the checks block merging, add the `story-checks` job as a required statu
 
 | Step | Command | Fails the job when |
 |---|---|---|
-| Check structure, references, and continuity | `story check "$STORY_DIR"` | `validate`, `links`, or `continuity` reports an error. |
+| Check structure, references, and continuity | `story check "$STORY_DIR" --format github` | `validate`, `links`, or `continuity` reports an error. |
 | Report project health | `story report "$STORY_DIR" --actionable` | Never. It prints inventory, check results, and next actions to the job log. |
 
 [`story check`](cli-reference.md#check) runs all three checks over one scan and lists every finding before it fails, so a validation error does not hide link and continuity results. Warnings show in the log but do not fail the job; add `--strict` to the `story check` line to fail on them too.
+
+With `--format github`, each error and warning is also an annotation: the pull request's **Files changed** tab shows it on the line of the chapter or record it is about, and the run's summary page lists every finding in a table. See [Annotations in GitHub Actions](#annotations-in-github-actions). The [review copy workflow](#review-copy-workflow) runs its check the same way.
 
 If a continuity finding is intentional, record it in `continuity/exemptions.md` rather than weakening the workflow. The finding is then reported as dismissed. See [Exemptions](continuity.md#exemptions) and [Project format reference](project-format.md).
 
