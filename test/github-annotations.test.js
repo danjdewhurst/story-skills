@@ -152,6 +152,10 @@ describe("GitHub annotation output", () => {
     const finding = warn("promise-unpaid", `${"é".repeat(SUMMARY_CELL_LIMIT - 1)}😀😀`, null);
     const summary = githubSummary([{ level: "warning", finding, file: null, line: null, endLine: null }], { errors: [], warnings: [finding], dismissed: [] }, "Story checks");
     expect(summary).toContain(`\` ${"é".repeat(SUMMARY_CELL_LIMIT - 1)}😀… \``);
+    // The cut comes before the escape, so an escaped control character is whole.
+    const escaped = warn("promise-unpaid", `${"a".repeat(SUMMARY_CELL_LIMIT - 1)}\u001b tail`, null);
+    const row = githubSummary([{ level: "warning", finding: escaped, file: null, line: null, endLine: null }], { errors: [], warnings: [escaped], dismissed: [] }, "Story checks");
+    expect(row).toContain(`${"a".repeat(SUMMARY_CELL_LIMIT - 1)}\\u001b… \``);
   });
 
   test("places what it can: no file property without a file, and no line for a file it cannot read", () => {

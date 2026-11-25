@@ -21943,9 +21943,10 @@ function escapeProperty(text) {
   return escapeData(text).replace(/:/g, "%3A").replace(/,/g, "%2C");
 }
 var SUMMARY_CELL_LIMIT = 500;
-function codeCell(text, limit = Infinity) {
-  const characters = Array.from(outputText(text));
-  const value = (characters.length > limit ? `${characters.slice(0, limit).join("")}…` : characters.join("")).replace(/\|/g, "\\|");
+function codeCell(text) {
+  const characters = Array.from(String(text));
+  const cut = characters.length > SUMMARY_CELL_LIMIT ? `${characters.slice(0, SUMMARY_CELL_LIMIT).join("")}…` : characters.join("");
+  const value = outputText(cut).replace(/\|/g, "\\|");
   const longest = Math.max(0, ...Array.from(value.matchAll(/`+/g), ([run]) => run.length));
   const fence = "`".repeat(longest + 1);
   return `${fence} ${value} ${fence}`;
@@ -22021,7 +22022,7 @@ function githubSummary(located, result, heading) {
   if (located.length > 0) {
     lines.push("| Level | File | Line | Finding | Code |", "|---|---|---|---|---|");
     for (const { level, finding, file, line } of located.slice(0, SUMMARY_ROW_LIMIT)) {
-      lines.push(`| ${level} | ${file === null ? "" : codeCell(file)} | ${line ?? ""} | ${codeCell(annotationMessage(finding, line), SUMMARY_CELL_LIMIT)} | ${codeCell(finding.code)} |`);
+      lines.push(`| ${level} | ${file === null ? "" : codeCell(file)} | ${line ?? ""} | ${codeCell(annotationMessage(finding, line))} | ${codeCell(finding.code)} |`);
     }
     if (located.length > SUMMARY_ROW_LIMIT) {
       lines.push("", `${located.length - SUMMARY_ROW_LIMIT} more findings are in the job log.`);
