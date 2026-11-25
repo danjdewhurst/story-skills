@@ -4,6 +4,7 @@ import { formatClueMatrix } from "./clues.js";
 import { formatKnowledgeMark } from "./chronology.js";
 import { formatContext } from "./context.js";
 import { formatGrid, gridFormat } from "./grid.js";
+import { checkFormat, reportGithub } from "./github.js";
 import { formatList } from "./list.js";
 import { formatComparison, formatLabelMapping } from "./compare.js";
 import { applySeverity, findingOverrides, readCliConfig } from "./config.js";
@@ -358,12 +359,15 @@ export const COMMANDS = [
     summary: [
       "Run validate, links, and continuity over one scan",
       "and report each finding once; --strict fails on",
-      "warnings too"
+      "warnings too; --format github adds GitHub Actions",
+      "annotations and a step summary"
     ],
     project: "positional",
-    options: ["strict", "json"],
+    options: ["strict", "format", "json"],
     run({ parsed, io, root, overrides }) {
-      const result = projectCheck(root(), { overrides, strict: isTruthy(parsed.options.strict) });
+      const format = checkFormat(parsed.options.format);
+      const projectRoot = root();
+      const result = projectCheck(projectRoot, { overrides, strict: isTruthy(parsed.options.strict) });
       if (wantsJson(parsed)) {
         return writeJsonResult(io, {
           command: "check",
@@ -371,6 +375,9 @@ export const COMMANDS = [
           data: { ...checkCounts(result), strict: result.strict, checks: checkSummaries(result.checks) },
           diagnostics: Object.entries(result.findings).flatMap(([name, check]) => diagnosticsFrom(check, name))
         });
+      }
+      if (format === "github") {
+        reportGithub(io, projectRoot, result, { env: io.env ?? process.env, cwd: io.cwd ?? process.cwd() });
       }
       return reportResult(io, result, "Checks passed", "Checks failed");
     }

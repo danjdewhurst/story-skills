@@ -96,12 +96,15 @@ export const CONFIG_REPAIR_COMMANDS = new Set(["validate", "report", "next", "do
 // outputText: a project from another author cannot send a terminal escape or
 // a CI log workflow command. story lsp speaks JSON-RPC on stdout, which JSON
 // escaping already covers, so its streams are left as they are.
+// `workflowStdout` is stdout without that escaping, for `story check
+// --format github` alone: its workflow commands must start a line, and
+// src/github.js escapes every value it puts in one.
 function safeStream(stream) {
   return { write: (value) => stream.write(typeof value === "string" ? outputText(value, { lines: true }) : value) };
 }
 
 export function runCli(argv, rawIo) {
-  const io = commandWord(argv) === "lsp" ? rawIo : { ...rawIo, stdout: safeStream(rawIo.stdout), stderr: safeStream(rawIo.stderr) };
+  const io = commandWord(argv) === "lsp" ? rawIo : { ...rawIo, stdout: safeStream(rawIo.stdout), stderr: safeStream(rawIo.stderr), workflowStdout: rawIo.stdout };
   let configured = [];
   // A command asked for --json reports a usage error or a failure as a JSON
   // result too, so a script reading stdout always gets one object. `writes`

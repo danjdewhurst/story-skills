@@ -55,10 +55,11 @@ jobs:
           echo "$RUNNER_TEMP/story-cli/bin" >> "$GITHUB_PATH"
 
       # story check runs validate, links, and continuity over one scan and
-      # reports every finding before failing. Add --strict to fail on
-      # warnings too.
+      # reports every finding before failing. --format github also puts each
+      # finding on its file and line in the pull request, and lists them on
+      # the run's summary page. Add --strict to fail on warnings too.
       - name: Check structure, references, and continuity
-        run: story check "$STORY_DIR"
+        run: story check "$STORY_DIR" --format github
 
       - name: Report project health
         run: story report "$STORY_DIR" --actionable
