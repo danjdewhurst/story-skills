@@ -12,7 +12,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 - `story check --format github` puts each finding on its file and line in a GitHub pull request, and lists the findings on the run's summary page. See [Annotations in GitHub Actions](docs/automation.md#annotations-in-github-actions).
   - Each error and warning is printed to stdout as a workflow command (`::error file=chapters/chapter-04.md,line=9,endLine=9,title=posthumous-appearance::…`), on the line the language server underlines. The file is relative to `GITHUB_WORKSPACE`, so a project in a subdirectory works. Dismissed findings are not annotated.
-  - When `GITHUB_STEP_SUMMARY` is set, a table of the first 200 findings is added to the run's summary page, each message cut to 500 characters. Project text in both is escaped, and each table cell is a code span, so it cannot start a workflow command or add a link.
+  - When `GITHUB_STEP_SUMMARY` is set, a table of the first 200 findings is added to the run's summary page, each cell cut to 500 characters. Project text in both is escaped, and each table cell is a code span, so it cannot start a workflow command or add a link.
   - The text report on stderr and the exit code do not change, and `--json` takes precedence. `--format text` is the default. `cli-defaults` cannot set `format` for `check`, so a project cannot change what a CI job prints.
   - The `story-checks.yml` and `review-copy.yml` templates now run `story check "$STORY_DIR" --format github`. Bump `STORY_VERSION` to the release that has it before you copy the new line into an older workflow.
 

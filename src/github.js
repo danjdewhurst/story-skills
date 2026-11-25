@@ -35,9 +35,10 @@ function escapeProperty(text) {
   return escapeData(text).replace(/:/g, "%3A").replace(/,/g, "%2C");
 }
 
-// A step summary cell's text is cut to this many characters, so findings
-// that quote long frontmatter values cannot push the summary past the size
-// GitHub accepts for one step.
+// A step summary cell's text is cut to this many characters before it is
+// escaped, so an escape is never cut in two, and findings that quote long
+// frontmatter values cannot push the summary past the size GitHub accepts
+// for one step.
 export const SUMMARY_CELL_LIMIT = 500;
 
 // Text in a markdown table cell, as a code span: GitHub reads no markdown,
@@ -47,9 +48,10 @@ export const SUMMARY_CELL_LIMIT = 500;
 // the text, and a space pads each side, which the code span drops again. A
 // `|` is backslash-escaped, which the table reads before the code span, so
 // it cannot add a column.
-function codeCell(text, limit = Infinity) {
-  const characters = Array.from(outputText(text));
-  const value = (characters.length > limit ? `${characters.slice(0, limit).join("")}…` : characters.join("")).replace(/\|/g, "\\|");
+function codeCell(text) {
+  const characters = Array.from(String(text));
+  const cut = characters.length > SUMMARY_CELL_LIMIT ? `${characters.slice(0, SUMMARY_CELL_LIMIT).join("")}…` : characters.join("");
+  const value = outputText(cut).replace(/\|/g, "\\|");
   const longest = Math.max(0, ...Array.from(value.matchAll(/`+/g), ([run]) => run.length));
   const fence = "`".repeat(longest + 1);
   return `${fence} ${value} ${fence}`;
@@ -146,7 +148,7 @@ export function githubSummary(located, result, heading) {
   if (located.length > 0) {
     lines.push("| Level | File | Line | Finding | Code |", "|---|---|---|---|---|");
     for (const { level, finding, file, line } of located.slice(0, SUMMARY_ROW_LIMIT)) {
-      lines.push(`| ${level} | ${file === null ? "" : codeCell(file)} | ${line ?? ""} | ${codeCell(annotationMessage(finding, line), SUMMARY_CELL_LIMIT)} | ${codeCell(finding.code)} |`);
+      lines.push(`| ${level} | ${file === null ? "" : codeCell(file)} | ${line ?? ""} | ${codeCell(annotationMessage(finding, line))} | ${codeCell(finding.code)} |`);
     }
     if (located.length > SUMMARY_ROW_LIMIT) {
       lines.push("", `${located.length - SUMMARY_ROW_LIMIT} more findings are in the job log.`);
