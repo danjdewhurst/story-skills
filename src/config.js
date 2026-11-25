@@ -47,9 +47,11 @@ const TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"], next: ["
 // --include-pending would put uncleared matter in every build, the
 // published review copy too, a default --query would refuse every
 // story list of another kind, an anonymous manuscript is for one
-// blind market, not every submission, and a default translation --record
-// would record every source change as translated before the check saw it.
-const ONE_RUN_FLAGS = { snapshot: ["force", "list", "id", "restore"], export: ["include-pending"], build: ["include-pending", "anonymous"], list: ["query"], translation: ["record"] };
+// blind market, not every submission, a default translation --record
+// would record every source change as translated before the check saw it,
+// and a default check --format would let a project's own story.md choose
+// what a CI job prints and adds to the run's summary page.
+const ONE_RUN_FLAGS = { snapshot: ["force", "list", "id", "restore"], export: ["include-pending"], build: ["include-pending", "anonymous"], list: ["query"], translation: ["record"], check: ["format"] };
 
 // Flags that only make sense together. When the command line gives any of a
 // group, the defaults for the whole group are dropped: `story build --format

@@ -3,8 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { err, warn } from "../src/findings.js";
-import { checkFormat, githubAnnotations, githubSummary, reportGithub, SUMMARY_ROW_LIMIT } from "../src/github.js";
+import { checkFormat, githubAnnotations, githubSummary, reportGithub, SUMMARY_CELL_LIMIT, SUMMARY_ROW_LIMIT } from "../src/github.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
+import { createStoryProject } from "../src/story.js";
 import { makeTempDir, memoryIo } from "./helpers.js";
 
 const schema = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
@@ -50,7 +51,7 @@ describe("story check --format github", () => {
     expect(code).toBe(1);
     const text = fs.readFileSync(summary, "utf8");
     expect(text).toStartWith("earlier step\n## Story checks\n\n4 errors, 3 warnings, 0 dismissed\n\n| Level | File | Line | Finding | Code |\n|---|---|---|---|---|\n");
-    expect(text).toContain("| error | chapters/chapter-04.md | 9 | lists edran-vale, who died in chapter-02; move posthumous appearances to mentions | posthumous-appearance |\n");
+    expect(text).toContain("| error | ` chapters/chapter-04.md ` | 9 | ` lists edran-vale, who died in chapter-02; move posthumous appearances to mentions ` | ` posthumous-appearance ` |\n");
     expect(text.split("\n").filter((line) => line.startsWith("| warning |"))).toHaveLength(3);
   });
 
@@ -96,8 +97,34 @@ describe("story check --format github", () => {
     expect(() => checkFormat("csv")).toThrow("Unknown check format: csv (use text or github)");
   });
 
-  test("other commands still escape a workflow command in their output", () => {
+  test("only check takes --format github", () => {
     expect(invoke(thread, ["validate", "--format", "github"]).code).toBe(2);
+  });
+
+  test("project text that starts a workflow command stays escaped on stderr, and in each annotation", () => {
+    const root = createStoryProject({ cwd: makeTempDir(), title: "Injected", force: false }).root;
+    expect(invoke(root, ["add", "chapter", "Opening"]).code).toBe(0);
+    const story = path.join(root, "story.md");
+    const text = fs.readFileSync(story, "utf8");
+    fs.writeFileSync(story, text.replace(/^---\n/, "---\nchecks:\n  - id: chapter-needs-hook\n    kind: chapter\n    where: [\"!hook\"]\n    level: warning\n    message: \"::error::injected\"\n"));
+    const { code, out, err: stderr } = invoke(root, ["check", "--format", "github", "--strict"]);
+    expect(code).toBe(1);
+    // Every stdout line is one of check's own commands, and --strict reports the warnings as errors.
+    const lines = out.trimEnd().split("\n");
+    expect(lines.every((line) => line.startsWith("::error "))).toBe(true);
+    const injected = lines.find((line) => line.includes("title=custom-chapter-needs-hook"));
+    // The message is data after the command's own `::`, so it needs no escape for its colons.
+    expect(injected).toBe("::error file=chapters/chapter-01.md,line=1,endLine=1,title=custom-chapter-needs-hook::::error::injected");
+    expect(stderr.split("\n").some((line) => line.startsWith("::"))).toBe(false);
+  });
+
+  test("cli-defaults cannot set format for check", () => {
+    const root = createStoryProject({ cwd: makeTempDir(), title: "Defaults", force: false }).root;
+    const story = path.join(root, "story.md");
+    fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace(/^---\n/, "---\ncli-defaults:\n  - command: check\n    format: github\n"));
+    const { code, err: stderr } = invoke(root, ["validate"]);
+    expect(code).toBe(1);
+    expect(stderr).toContain("sets format, which belongs to one run: pass --format on the command line");
   });
 });
 
@@ -111,7 +138,20 @@ describe("GitHub annotation output", () => {
     ]);
     const summary = githubSummary([{ level: "error", finding, file: "chapters/a.md", line: 3, endLine: 4 }], { errors: [finding], warnings: [], dismissed: [] }, "Story checks");
     const row = summary.split("\n").find((line) => line.startsWith("| error |"));
-    expect(row).toBe(String.raw`| error | chapters/a.md | 3 | lists x\\u000a::error::injected 100% \| \[link\](https://example.com) \<b\> | posthumous-appearance |`);
+    expect(row).toBe(String.raw`| error | ${"`"} chapters/a.md ${"`"} | 3 | ${"`"} lists x\u000a::error::injected 100% \| [link](https://example.com) <b> ${"`"} | ${"`"} posthumous-appearance ${"`"} |`);
+  });
+
+  test("summary cells are code spans, so a bare web address or backticks in project text add no link or markup", () => {
+    const finding = warn("promise-unpaid", "see https://evil.example/login and www.evil.example, `code`, ``two``", null);
+    const summary = githubSummary([{ level: "warning", finding, file: null, line: null, endLine: null }], { errors: [], warnings: [finding], dismissed: [] }, "Story checks");
+    const row = summary.split("\n").find((line) => line.startsWith("| warning |"));
+    expect(row).toBe("| warning |  |  | ``` see https://evil.example/login and www.evil.example, `code`, ``two`` ``` | ` promise-unpaid ` |");
+  });
+
+  test("a long message is cut in the summary, and never inside a character", () => {
+    const finding = warn("promise-unpaid", `${"é".repeat(SUMMARY_CELL_LIMIT - 1)}😀😀`, null);
+    const summary = githubSummary([{ level: "warning", finding, file: null, line: null, endLine: null }], { errors: [], warnings: [finding], dismissed: [] }, "Story checks");
+    expect(summary).toContain(`\` ${"é".repeat(SUMMARY_CELL_LIMIT - 1)}😀… \``);
   });
 
   test("places what it can: no file property without a file, and no line for a file it cannot read", () => {
@@ -130,6 +170,34 @@ describe("GitHub annotation output", () => {
       "::warning title=no-scene-records::the project has a warning about no file",
       ""
     ]);
+  });
+
+  test("a file outside the workspace gets no file property, and keeps its label in the message", () => {
+    const root = makeTempDir();
+    const workspace = makeTempDir();
+    fs.writeFileSync(path.join(root, "story.md"), "---\ntitle: T\n---\n");
+    const io = memoryIo(root);
+    reportGithub(io, root, { errors: [err("parse-error", "story.md: Unclosed thing (line 2)", "story.md")], warnings: [], dismissed: [] }, { env: { GITHUB_WORKSPACE: workspace }, cwd: root });
+    expect(io.output()).toBe("::error title=parse-error::story.md: Unclosed thing (line 2)\n");
+  });
+
+  test("a workspace that does not exist leaves every file outside it", () => {
+    const root = makeTempDir();
+    fs.writeFileSync(path.join(root, "story.md"), "---\ntitle: T\n---\n");
+    const io = memoryIo(root);
+    reportGithub(io, root, { errors: [err("parse-error", "story.md: Unclosed thing (line 2)", "story.md")], warnings: [], dismissed: [] }, { env: { GITHUB_WORKSPACE: path.join(root, "missing") }, cwd: root });
+    expect(io.output()).toBe("::error title=parse-error::story.md: Unclosed thing (line 2)\n");
+  });
+
+  test("a workspace reached through a symlink still gives paths inside it", () => {
+    const real = makeTempDir();
+    const link = path.join(makeTempDir(), "workspace");
+    fs.symlinkSync(real, link, "dir");
+    fs.mkdirSync(path.join(real, "book"));
+    fs.writeFileSync(path.join(real, "book", "story.md"), "---\ntitle: T\n---\n");
+    const io = memoryIo(real);
+    reportGithub(io, path.join(real, "book"), { errors: [err("parse-error", "story.md: Unclosed thing (line 2)", "story.md")], warnings: [], dismissed: [] }, { env: { GITHUB_WORKSPACE: link }, cwd: real });
+    expect(io.output()).toBe("::error file=book/story.md,line=2,endLine=2,title=parse-error::Unclosed thing (line 2)\n");
   });
 
   test("the summary table stops at the row limit and says how many more there are", () => {

@@ -35,19 +35,42 @@ function escapeProperty(text) {
   return escapeData(text).replace(/:/g, "%3A").replace(/,/g, "%2C");
 }
 
-// Text in a markdown table cell: control characters escaped, and the
-// punctuation that markdown or HTML reads inline backslash-escaped, so a
-// finding that quotes project text cannot add a link, an image, a tag,
-// emphasis, or a column.
-function markdownCell(text) {
-  return outputText(text).replace(/[\\`*_[\]<>!|~&]/g, "\\$&");
+// A step summary cell's text is cut to this many characters, so findings
+// that quote long frontmatter values cannot push the summary past the size
+// GitHub accepts for one step.
+export const SUMMARY_CELL_LIMIT = 500;
+
+// Text in a markdown table cell, as a code span: GitHub reads no markdown,
+// HTML, or bare web address inside one, so a finding that quotes project
+// text cannot add a link, an image, a tag, or emphasis. Control characters
+// are escaped, the fence is one backtick longer than any run of backticks in
+// the text, and a space pads each side, which the code span drops again. A
+// `|` is backslash-escaped, which the table reads before the code span, so
+// it cannot add a column.
+function codeCell(text, limit = Infinity) {
+  const characters = Array.from(outputText(text));
+  const value = (characters.length > limit ? `${characters.slice(0, limit).join("")}…` : characters.join("")).replace(/\|/g, "\\|");
+  const longest = Math.max(0, ...Array.from(value.matchAll(/`+/g), ([run]) => run.length));
+  const fence = "`".repeat(longest + 1);
+  return `${fence} ${value} ${fence}`;
+}
+
+// A path that resolves symlinks where it can, so a workspace reached through
+// a symlink and a project under it give a relative path inside it.
+function realPath(filePath) {
+  try {
+    return fs.realpathSync(filePath);
+  } catch {
+    return path.resolve(filePath);
+  }
 }
 
 // Where each finding is, as the annotation names it: the file relative to
 // the repository (GITHUB_WORKSPACE, else the working directory), with `/`,
 // and the 1-based first and last line the language server would underline.
-// A finding about no file, or about a file that cannot be read, has no
-// line; one about no file has no path either.
+// A finding about a file that cannot be read has no line. One about no
+// file, or about a file outside the workspace, which GitHub could not place,
+// has neither.
 function locate(projectRoot, workspace, findings) {
   const texts = new Map();
   const textOf = (file) => {
@@ -67,7 +90,11 @@ function locate(projectRoot, workspace, findings) {
       return { level, finding, file: null, line: null, endLine: null };
     }
     const absolute = path.resolve(projectRoot, finding.file);
-    const file = portablePath(path.relative(workspace, absolute));
+    const relative = path.relative(workspace, absolute);
+    if (relative === "" || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+      return { level, finding, file: null, line: null, endLine: null };
+    }
+    const file = portablePath(relative);
     const text = textOf(absolute);
     if (text === null) {
       return { level, finding, file, line: null, endLine: null };
@@ -119,7 +146,7 @@ export function githubSummary(located, result, heading) {
   if (located.length > 0) {
     lines.push("| Level | File | Line | Finding | Code |", "|---|---|---|---|---|");
     for (const { level, finding, file, line } of located.slice(0, SUMMARY_ROW_LIMIT)) {
-      lines.push(`| ${level} | ${file === null ? "" : markdownCell(file)} | ${line ?? ""} | ${markdownCell(annotationMessage(finding, line))} | ${markdownCell(finding.code)} |`);
+      lines.push(`| ${level} | ${file === null ? "" : codeCell(file)} | ${line ?? ""} | ${codeCell(annotationMessage(finding, line), SUMMARY_CELL_LIMIT)} | ${codeCell(finding.code)} |`);
     }
     if (located.length > SUMMARY_ROW_LIMIT) {
       lines.push("", `${located.length - SUMMARY_ROW_LIMIT} more findings are in the job log.`);
@@ -136,8 +163,8 @@ export function githubSummary(located, result, heading) {
 // leaves unescaped, since its usual stdout escapes the `::` that starts a
 // workflow command: every value in them is escaped here instead.
 export function reportGithub(io, projectRoot, result, { env = process.env, cwd = process.cwd(), heading = "Story checks" } = {}) {
-  const workspace = typeof env.GITHUB_WORKSPACE === "string" && env.GITHUB_WORKSPACE !== "" ? path.resolve(env.GITHUB_WORKSPACE) : path.resolve(cwd);
-  const located = locate(projectRoot, workspace, levelled(result));
+  const workspace = realPath(typeof env.GITHUB_WORKSPACE === "string" && env.GITHUB_WORKSPACE !== "" ? env.GITHUB_WORKSPACE : cwd);
+  const located = locate(realPath(projectRoot), workspace, levelled(result));
   (io.workflowStdout ?? io.stdout).write(githubAnnotations(located));
   const summary = env.GITHUB_STEP_SUMMARY;
   if (typeof summary === "string" && summary !== "") {

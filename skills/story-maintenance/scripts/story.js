@@ -21942,8 +21942,20 @@ function escapeData(text) {
 function escapeProperty(text) {
   return escapeData(text).replace(/:/g, "%3A").replace(/,/g, "%2C");
 }
-function markdownCell(text) {
-  return outputText(text).replace(/[\\`*_[\]<>!|~&]/g, "\\$&");
+var SUMMARY_CELL_LIMIT = 500;
+function codeCell(text, limit = Infinity) {
+  const characters = Array.from(outputText(text));
+  const value = (characters.length > limit ? `${characters.slice(0, limit).join("")}…` : characters.join("")).replace(/\|/g, "\\|");
+  const longest = Math.max(0, ...Array.from(value.matchAll(/`+/g), ([run]) => run.length));
+  const fence = "`".repeat(longest + 1);
+  return `${fence} ${value} ${fence}`;
+}
+function realPath(filePath) {
+  try {
+    return fs6.realpathSync(filePath);
+  } catch {
+    return path15.resolve(filePath);
+  }
 }
 function locate(projectRoot, workspace, findings) {
   const texts = new Map;
@@ -21962,7 +21974,11 @@ function locate(projectRoot, workspace, findings) {
       return { level, finding, file: null, line: null, endLine: null };
     }
     const absolute = path15.resolve(projectRoot, finding.file);
-    const file = portablePath(path15.relative(workspace, absolute));
+    const relative = path15.relative(workspace, absolute);
+    if (relative === "" || relative === ".." || relative.startsWith(`..${path15.sep}`) || path15.isAbsolute(relative)) {
+      return { level, finding, file: null, line: null, endLine: null };
+    }
+    const file = portablePath(relative);
     const text = textOf(absolute);
     if (text === null) {
       return { level, finding, file, line: null, endLine: null };
@@ -22005,7 +22021,7 @@ function githubSummary(located, result, heading) {
   if (located.length > 0) {
     lines.push("| Level | File | Line | Finding | Code |", "|---|---|---|---|---|");
     for (const { level, finding, file, line } of located.slice(0, SUMMARY_ROW_LIMIT)) {
-      lines.push(`| ${level} | ${file === null ? "" : markdownCell(file)} | ${line ?? ""} | ${markdownCell(annotationMessage(finding, line))} | ${markdownCell(finding.code)} |`);
+      lines.push(`| ${level} | ${file === null ? "" : codeCell(file)} | ${line ?? ""} | ${codeCell(annotationMessage(finding, line), SUMMARY_CELL_LIMIT)} | ${codeCell(finding.code)} |`);
     }
     if (located.length > SUMMARY_ROW_LIMIT) {
       lines.push("", `${located.length - SUMMARY_ROW_LIMIT} more findings are in the job log.`);
@@ -22017,8 +22033,8 @@ function githubSummary(located, result, heading) {
 `;
 }
 function reportGithub(io, projectRoot, result, { env = process.env, cwd = process.cwd(), heading = "Story checks" } = {}) {
-  const workspace = typeof env.GITHUB_WORKSPACE === "string" && env.GITHUB_WORKSPACE !== "" ? path15.resolve(env.GITHUB_WORKSPACE) : path15.resolve(cwd);
-  const located = locate(projectRoot, workspace, levelled(result));
+  const workspace = realPath(typeof env.GITHUB_WORKSPACE === "string" && env.GITHUB_WORKSPACE !== "" ? env.GITHUB_WORKSPACE : cwd);
+  const located = locate(realPath(projectRoot), workspace, levelled(result));
   (io.workflowStdout ?? io.stdout).write(githubAnnotations(located));
   const summary = env.GITHUB_STEP_SUMMARY;
   if (typeof summary === "string" && summary !== "") {
@@ -23476,7 +23492,7 @@ function formatRow(row) {
 var SEVERITY_LEVELS = ["error", "warning", "off"];
 var TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove", "split", "merge", "impact"]);
 var TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"], next: ["date"], submissions: ["date"], translation: ["chapter"], build: ["chapter", "from", "to"] };
-var ONE_RUN_FLAGS = { snapshot: ["force", "list", "id", "restore"], export: ["include-pending"], build: ["include-pending", "anonymous"], list: ["query"], translation: ["record"] };
+var ONE_RUN_FLAGS = { snapshot: ["force", "list", "id", "restore"], export: ["include-pending"], build: ["include-pending", "anonymous"], list: ["query"], translation: ["record"], check: ["format"] };
 var LINKED_FLAGS = {
   build: [["format", "shunn", "trim", "stamp", "note-url", "pdf"]],
   compare: [["ref", "against", "snapshot"]],
@@ -25233,7 +25249,7 @@ var TAKEOVER_STALE_MS = 2000;
 var held = new Map;
 function withProjectLock(root, run, options = {}) {
   const projectRoot = path19.resolve(root);
-  const key = realPath(projectRoot);
+  const key = realPath2(projectRoot);
   if (held.has(key)) {
     held.set(key, held.get(key) + 1);
     try {
@@ -25264,7 +25280,7 @@ function withProjectLock(root, run, options = {}) {
 }
 function lockedByAnother(root) {
   const projectRoot = path19.resolve(root);
-  return !held.has(realPath(projectRoot)) && readOwner(path19.join(projectRoot, LOCK_FILE))?.alive === true;
+  return !held.has(realPath2(projectRoot)) && readOwner(path19.join(projectRoot, LOCK_FILE))?.alive === true;
 }
 function acquire(lockPath) {
   const deadline = Date.now() + lockWaitMs();
@@ -25294,7 +25310,7 @@ function acquire(lockPath) {
   return created;
 }
 function withProjectLocks(locks, run) {
-  const order = (lock) => realPath(path19.resolve(lock.root));
+  const order = (lock) => realPath2(path19.resolve(lock.root));
   return [...locks].sort((left, right) => order(left) < order(right) ? -1 : order(left) > order(right) ? 1 : 0).reduceRight((inner, lock) => () => withProjectLock(lock.root, inner, lock), run)();
 }
 function removeStale(lockPath, staleText) {
@@ -25431,7 +25447,7 @@ function sleep(ms) {
 function isDirectory(target) {
   return fs8.statSync(target, { throwIfNoEntry: false })?.isDirectory() === true;
 }
-function realPath(target) {
+function realPath2(target) {
   try {
     return fs8.realpathSync(target);
   } catch {
@@ -28611,7 +28627,7 @@ function previewChanges(root, run) {
   requireStoryFile(projectRoot);
   return inScratch(projectRoot, run, (copyRoot, mirror, atRoot, scratch) => {
     fs14.mkdirSync(path28.dirname(copyRoot), { recursive: true });
-    copyProject(projectRoot, copyRoot, { realSource: realPath2(projectRoot), copyRoot, cover: coverOf(projectRoot) });
+    copyProject(projectRoot, copyRoot, { realSource: realPath3(projectRoot), copyRoot, cover: coverOf(projectRoot) });
     if (!atRoot) {
       copyLinkedBooks(projectRoot, mirror, scratch);
     }
@@ -28643,7 +28659,7 @@ function previewNewProject(root, run) {
     if (stats?.isSymbolicLink()) {
       fs14.symlinkSync(path28.join(path28.dirname(copyRoot), ".story-dry-run-link"), copyRoot);
     } else if (stats?.isDirectory()) {
-      copyProject(target, copyRoot, { realSource: realPath2(target), copyRoot, cover: coverOf(target) });
+      copyProject(target, copyRoot, { realSource: realPath3(target), copyRoot, cover: coverOf(target) });
     } else if (stats) {
       copyRegularFile(target, copyRoot);
     }
@@ -28678,20 +28694,20 @@ function inScratch(target, run, prepare) {
 }
 function copyLinkedBooks(projectRoot, mirror, scratch) {
   const parent = path28.dirname(projectRoot);
-  const realParent = realPath2(parent);
+  const realParent = realPath3(parent);
   const home = (real) => isPathInside(realParent, real) ? path28.join(parent, path28.relative(realParent, real)) : real;
   const alias = (link, book) => {
     const copy = mirror(link);
     if (link === book || lstatIfExists(copy) !== null) {
       return;
     }
-    if (!isPathInside(scratch, realPath2(nearestExistingAncestor(path28.dirname(copy)).ancestor))) {
+    if (!isPathInside(scratch, realPath3(nearestExistingAncestor(path28.dirname(copy)).ancestor))) {
       return;
     }
     fs14.mkdirSync(path28.dirname(copy), { recursive: true });
     fs14.symlinkSync(mirror(book), copy);
   };
-  const projectReal = realPath2(projectRoot);
+  const projectReal = realPath3(projectRoot);
   const copies = new Map([[projectReal, projectRoot]]);
   alias(home(projectReal), projectRoot);
   const queued = new Set([projectReal]);
@@ -28707,7 +28723,7 @@ function copyLinkedBooks(projectRoot, mirror, scratch) {
     const source = translationSourceToCopy(book, data);
     const links = ["follows", "precedes"].flatMap((field) => seriesLinks(book, data ?? {}, field)).concat(source === undefined ? [] : [source.real]);
     for (const link of links) {
-      const real = realPath2(link);
+      const real = realPath3(link);
       if (!copies.has(real)) {
         const target = mirror(home(real));
         if (copies.size > MAX_SERIES_BOOKS || !fs14.existsSync(path28.join(real, "story.md")) || fs14.existsSync(target)) {
@@ -28847,7 +28863,7 @@ function copyProject(source, target, roots, depth = 0) {
     } else if (entry.isSymbolicLink()) {
       fs14.symlinkSync(linkTarget(fs14.readlinkSync(from), roots), to, isFolder(from) ? "dir" : "file");
     } else if (entry.isFile() && entry.name !== LOCK_FILE && entry.name !== TAKEOVER_FILE) {
-      copyRegularFile(from, to, IMAGE_EXTENSIONS.test(entry.name) || Boolean(roots.cover) && realPath2(from).toLowerCase() === roots.cover);
+      copyRegularFile(from, to, IMAGE_EXTENSIONS.test(entry.name) || Boolean(roots.cover) && realPath3(from).toLowerCase() === roots.cover);
     }
   }
   fs14.chmodSync(target, copyMode(source, true));
@@ -28896,7 +28912,7 @@ var IMAGE_EXTENSIONS = /\.(?:gif|jpe?g|png|webp)$/i;
 function coverOf(root) {
   const cover = existingStoryData(root)?.cover;
   const text = typeof cover === "string" ? cover.trim() : "";
-  return text === "" || PATH_CONTROL_CHARACTERS.test(text) ? null : realPath2(path28.resolve(root, text)).toLowerCase();
+  return text === "" || PATH_CONTROL_CHARACTERS.test(text) ? null : realPath3(path28.resolve(root, text)).toLowerCase();
 }
 function copyMode(source, directory) {
   let mode = fs14.statSync(source).mode & 4095;
@@ -28921,7 +28937,7 @@ function linkTarget(target, { realSource, copyRoot }) {
   if (!path28.isAbsolute(target)) {
     return target;
   }
-  const real = realPath2(target);
+  const real = realPath3(target);
   return isPathInside(realSource, real) ? path28.join(copyRoot, path28.relative(realSource, real)) : target;
 }
 function removeScratch(scratch) {
@@ -28965,7 +28981,7 @@ function toProjectError(error, from, to) {
   }
   return error;
 }
-function realPath2(target) {
+function realPath3(target) {
   try {
     return fs14.realpathSync(target);
   } catch {
@@ -37616,7 +37632,7 @@ function newerPinAction(pins) {
 function cliUpdateHint(version, file = fileURLToPath2(import.meta.url), execPath = process.execPath) {
   const location = file.replace(/\\/g, "/");
   if (/\/(\$bunfs|~BUN)\//.test(location)) {
-    return /\/Cellar\/story-skills\//.test(realPath3(execPath).replace(/\\/g, "/")) ? "update it with brew upgrade story-skills" : `download the ${version} binary for your system from ${RELEASES}/tag/v${version}`;
+    return /\/Cellar\/story-skills\//.test(realPath4(execPath).replace(/\\/g, "/")) ? "update it with brew upgrade story-skills" : `download the ${version} binary for your system from ${RELEASES}/tag/v${version}`;
   }
   const holder = /^(.*)\/node_modules\/story-skills\//.exec(location)?.[1];
   if (holder !== undefined) {
@@ -37659,7 +37675,7 @@ function packageHint(holder, version) {
 function docsHint(version) {
   return `update it to ${version} (see Update or pin the CLI in docs/getting-started.md)`;
 }
-function realPath3(file) {
+function realPath4(file) {
   try {
     return fs30.realpathSync(file);
   } catch {

@@ -94,6 +94,8 @@ jobs:
           npm install --global --prefix "$RUNNER_TEMP/story-cli" "${STORY_PACKAGE:-story-skills@$STORY_VERSION}"
           echo "$RUNNER_TEMP/story-cli/bin" >> "$GITHUB_PATH"
 
+      # --format github puts each finding on its file and line; it needs a
+      # STORY_VERSION after 0.25.0.
       - name: Check the project before publishing it
         run: story check "$STORY_DIR" --format github
 
