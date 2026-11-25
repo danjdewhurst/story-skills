@@ -125,7 +125,7 @@ exit=1
 
 By default, output is plain text with stable line prefixes, so you can filter it with standard tools. For a machine-readable result, see [JSON output](#json-output).
 
-- `validate`, `links`, `continuity`, `check`, and `mentions` with no entity write only to **stderr**: one summary line, then one line per finding, prefixed `error:`, `warning:`, or `dismissed:`. Nothing goes to stdout.
+- `validate`, `links`, `continuity`, `check`, and `mentions` with no entity write only to **stderr**: one summary line, then one line per finding, prefixed `error:`, `warning:`, or `dismissed:`. Nothing goes to stdout, except the workflow commands of `check --format github` (see [Annotations in GitHub Actions](#annotations-in-github-actions)).
 - `compare`, `notes`, `apply <file.docx>`, `similarity`, `progress`, `submissions`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, `mentions <kind> <id>`, `series`, and `translation` write their report to stdout and the same summary and finding lines to stderr.
 - Every other command writes its report or confirmation to stdout.
 - A command that cannot run, for example because of an unknown option or a missing argument, prints one error line to stderr and exits 2. An unknown command also prints the full help text after the error.
@@ -196,9 +196,9 @@ story build --format epub --json | jq -r '.data.outFile'
 ::error file=chapters/chapter-04.md,line=9,endLine=9,title=posthumous-appearance::lists edran-vale, who died in chapter-02; move posthumous appearances to mentions
 ```
 
-GitHub shows each one as an annotation on that file and line, in the pull request and on the run's page. The file is relative to the repository root (`GITHUB_WORKSPACE`, else the working directory), so a project in a subdirectory still points at the right file. The line is the one the [language server](editors.md) underlines. A finding about no file, or about a file that cannot be read, is still annotated, without a place. Dismissed findings are not annotated. When the job sets `GITHUB_STEP_SUMMARY`, as GitHub Actions does, `check` also adds a table of the findings to the run's summary page, with at most 200 rows.
+GitHub shows each one as an annotation on that file and line, in the pull request and on the run's page. The file is relative to `GITHUB_WORKSPACE`, else the working directory, so a project in a subdirectory still points at the right file. That is the repository root unless `actions/checkout` puts the repository in a subfolder with `path:`; GitHub then cannot place the annotations on the pull request's files, though the job still fails as before. The line is the one the [language server](editors.md) underlines. A finding about a file that cannot be read is annotated on that file without a line, and one about no file, or about a file outside the workspace, without a file. Dismissed findings are not annotated. When the job sets `GITHUB_STEP_SUMMARY`, as GitHub Actions does, `check` also adds a table of the findings to the run's summary page: the first 200, each message cut to 500 characters.
 
-The text report still goes to stderr, and the exit code is the same as without `--format github`. `--json` takes precedence and prints only the JSON result. GitHub shows only a limited number of annotations for each step, so on a project with many findings, the job log and the summary table have the full list. Project text in an annotation or the table is escaped, so a finding that quotes a chapter cannot start a workflow command of its own or add a link.
+The text report still goes to stderr, and the exit code is the same as without `--format github`. `--json` takes precedence and prints only the JSON result. GitHub shows only a limited number of annotations for each step, so on a project with many findings, the job log has the full list. Project text in an annotation or the table is escaped, so a finding that quotes a chapter cannot start a workflow command of its own, and each table cell is a code span, so it cannot add a link, an image, or a column. `cli-defaults` in `story.md` cannot set `format` for `check`, so a project cannot change what a job prints: pass `--format github` in the workflow.
 
 ### Failing on warnings
 
@@ -345,7 +345,7 @@ To make the checks block merging, add the `story-checks` job as a required statu
 
 [`story check`](cli-reference.md#check) runs all three checks over one scan and lists every finding before it fails, so a validation error does not hide link and continuity results. Warnings show in the log but do not fail the job; add `--strict` to the `story check` line to fail on them too.
 
-With `--format github`, each error and warning is also an annotation: the pull request's **Files changed** tab shows it on the line of the chapter or record it is about, and the run's summary page lists every finding in a table. See [Annotations in GitHub Actions](#annotations-in-github-actions). The [review copy workflow](#review-copy-workflow) runs its check the same way.
+With `--format github`, each error and warning is also an annotation: the pull request's **Files changed** tab shows it on the line of the chapter or record it is about, and the run's summary page lists the findings in a table. See [Annotations in GitHub Actions](#annotations-in-github-actions). The [review copy workflow](#review-copy-workflow) runs its check the same way. `check` takes `--format` from the release after 0.25.0, so in a workflow copied from an older template, bump `STORY_VERSION` before you add it.
 
 If a continuity finding is intentional, record it in `continuity/exemptions.md` rather than weakening the workflow. The finding is then reported as dismissed. See [Exemptions](continuity.md#exemptions) and [Project format reference](project-format.md).
 

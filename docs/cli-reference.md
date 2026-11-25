@@ -283,13 +283,13 @@ Defaults apply with `--json` too, and to `prose -` and `voices -` inside a proje
 
 The CLI prints results to stdout and diagnostics to stderr.
 
-- `validate`, `links`, `continuity`, `check`, and `mentions` with no entity write everything to **stderr**: a summary line, then one line per `error:`, `warning:`, and `dismissed:` finding. Nothing goes to stdout. A `warning:` line ends with the warning's [code](#finding-codes) in brackets, as does an `error:` line for a warning `severity` promoted.
+- `validate`, `links`, `continuity`, `check`, and `mentions` with no entity write everything to **stderr**: a summary line, then one line per `error:`, `warning:`, and `dismissed:` finding. Nothing goes to stdout, except the workflow commands of [`check --format github`](#check). A `warning:` line ends with the warning's [code](#finding-codes) in brackets, as does an `error:` line for a warning `severity` promoted.
 - `compare`, `notes`, `apply <file.docx>`, `similarity`, `progress`, `submissions`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, `mentions <kind> <id>`, `series`, and `translation` write their report to stdout, then the same summary and finding lines to stderr.
 - `diagram` writes the Mermaid source (or, with `--out`, a confirmation) to stdout, `grid` the plot grid, and `list` one line per match, with a `3 of 12 chapters matched` count on stderr. If the project has a file that fails to parse, they write the summary and error lines to stderr instead.
 - All other commands write a short confirmation or report to stdout, except `lsp`, which writes only protocol messages there for the editor.
 - Errors that stop a command (a bad option, a missing project, an unknown id) print one line to stderr.
 - With `--json`, the command prints one JSON object to stdout and nothing to stderr. See [JSON output](#json-output).
-- Text output never passes on a control character from project text. In a finding it shows as a `\u` escape, such as `\u001b` for an escape character, and so do line breaks, so each finding stays on one line. In other output, tabs, line breaks, and the direction marks right-to-left text needs stay, and a line that would start with `::`, which GitHub Actions reads as a workflow command, starts with `\u003a:` instead.
+- Text output never passes on a control character from project text. In a finding it shows as a `\u` escape, such as `\u001b` for an escape character, and so do line breaks, so each finding stays on one line. In other output, tabs, line breaks, and the direction marks right-to-left text needs stay, and a line that would start with `::`, which GitHub Actions reads as a workflow command, starts with `\u003a:` instead. The one exception is the `::error` and `::warning` lines that `check --format github` prints on purpose; every value from the project in them is escaped, so project text cannot start a command of its own.
 
 The examples on this page show stdout and stderr together, as a terminal does.
 
@@ -947,7 +947,7 @@ Each finding is reported once. A file that fails to parse, which every check rep
 | Option | Effect |
 |---|---|
 | `--strict` | Fail on warnings too: every warning is reported as an error and the run exits 1. Dismissed findings stay dismissed. |
-| `--format github` | Also print each error and warning to stdout as a GitHub Actions workflow command (`::error file=…,line=…::…`), so GitHub shows it on its file and line, and, when `GITHUB_STEP_SUMMARY` is set, add a table of the findings to the run's summary page. The text report and the exit code do not change. `--format text`, the default, prints only the text report. See [Annotations in GitHub Actions](automation.md#annotations-in-github-actions). |
+| `--format github` | Also print each error and warning to stdout as a GitHub Actions workflow command (`::error file=…,line=…::…`), so GitHub shows it on its file and line, and, when `GITHUB_STEP_SUMMARY` is set, add a table of the findings to the run's summary page. The text report and the exit code do not change. `--format text`, the default, prints only the text report. `cli-defaults` cannot set it. See [Annotations in GitHub Actions](automation.md#annotations-in-github-actions). |
 
 Using [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/), whose only findings come from `continuity`:
 
